@@ -254,10 +254,9 @@ impl Shell {
             if let Some(job) = self.jobs.get_mut(&job_pgid) {
                 if job.is_stopped() {
                     job.saved_termios = Some(get_termios().expect("tcgetattr"));
+                    set_termios(&saved_termios).expect("tcsetattr");
                 }
             }
-
-            set_termios(&saved_termios).expect("tcsetattr");
         }
 
         for (cond, pipeline) in list.following.iter() {
@@ -281,10 +280,9 @@ impl Shell {
             if let Some(job) = self.jobs.get_mut(&job_pgid) {
                 if job.is_stopped() {
                     job.saved_termios = Some(get_termios().expect("tcgetattr"));
+                    set_termios(&saved_termios).expect("tcsetattr");
                 }
             }
-
-            set_termios(&saved_termios).expect("tcsetattr");
         }
 
         if !interactive {
@@ -735,10 +733,9 @@ fn builtin_fg(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
     if let Some(job) = shell.jobs.get_mut(&job_pgid) {
         if job.is_stopped() {
             job.saved_termios = Some(get_termios().expect("tcgetattr"));
+            set_termios(&saved_termios).expect("tcsetattr");
         }
     }
-
-    set_termios(&saved_termios).expect("tcsetattr");
 
     status
 }
