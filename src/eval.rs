@@ -668,8 +668,6 @@ fn builtin_cd(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
 }
 
 fn builtin_jobs(shell: &mut Shell, _args: &[CString], mut io: Io) -> i32 {
-    dbg!(&shell.jobs);
-
     for (i, (pgid, _)) in shell.jobs.iter().enumerate() {
         let _ = writeln!(&mut io.output, "[{i}] {pgid}");
     }
@@ -677,8 +675,6 @@ fn builtin_jobs(shell: &mut Shell, _args: &[CString], mut io: Io) -> i32 {
 }
 
 fn builtin_fg(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
-    dbg!(&shell.jobs);
-
     let job_pgid = if let Some(arg) = args.get(1) {
         let valid_pgid = std::str::from_utf8(arg.as_bytes())
             .ok()
