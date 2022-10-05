@@ -683,7 +683,7 @@ fn builtin_fg(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
         let valid_pgid = std::str::from_utf8(arg.as_bytes())
             .ok()
             .and_then(|s| s.parse::<i32>().ok())
-            .map(|int| Pgid::from_raw(int))
+            .map(Pgid::from_raw)
             .and_then(|pgid| {
                 if shell.jobs.contains_key(&pgid) {
                     Some(pgid)
