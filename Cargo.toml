@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 nix = "0.25.0"
 peg = "0.8.0"
+unicode-width = "0.1.10"
