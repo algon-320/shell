@@ -17,12 +17,6 @@ fn main() {
             format!("\x1b[31m{:3}\x1b[m", last_status)
         };
 
-        let job_status = if shell.jobs() > 0 {
-            "*".repeat(shell.jobs())
-        } else {
-            "".to_owned()
-        };
-
         let extra_status = if last_status >= 128 {
             format!(
                 ":\x1b[33m{}\x1b[m",
@@ -32,7 +26,14 @@ fn main() {
             "".to_owned()
         };
 
-        print!("[{}{}] {}% ", status, extra_status, job_status);
+        print!("[{}{}] ", status, extra_status);
+
+        let job_status = match shell.jobs() {
+            0 => "".to_owned(),
+            1 => "*".to_owned(),
+            num => format!("*{num}"),
+        };
+        print!("{}", job_status);
         stdout().flush().unwrap();
 
         use line_editor::EditError;
@@ -46,7 +47,13 @@ fn main() {
                 continue;
             }
             Err(EditError::Exitted) => {
-                break;
+                if shell.jobs() == 0 {
+                    break;
+                } else {
+                    println!();
+                    println!("You have suspended jobs");
+                    continue;
+                }
             }
         };
 

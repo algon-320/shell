@@ -119,6 +119,18 @@ impl LineEditor {
                 // Erase lines
                 print!("\x1b[J");
 
+                match self.mode {
+                    Mode::Insert(..) => {
+                        print!("\x1b[36;1m%\x1b[m ");
+                    }
+                    Mode::Normal(..) => {
+                        print!("\x1b[34;1m%\x1b[m ");
+                    }
+                    Mode::Visual(..) => {
+                        print!("\x1b[32;1m%\x1b[m ");
+                    }
+                }
+
                 let hl_range = {
                     if let Mode::Visual(VisualMode { origin }) = self.mode {
                         if origin == isize::MIN {
@@ -152,7 +164,7 @@ impl LineEditor {
                 }
 
                 print!("\x1b8");
-                let cursor_step = line.buf.iter().take(line.cursor).fold(0, |a, (_, w)| a + w);
+                let cursor_step = 2 + line.buf.iter().take(line.cursor).fold(0, |a, (_, w)| a + w);
                 if cursor_step > 0 {
                     print!("\x1b[{}C", cursor_step);
                 }
