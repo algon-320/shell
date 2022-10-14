@@ -5,7 +5,7 @@ use nix::unistd::{self, Pid};
 use std::collections::HashMap;
 use std::ffi::{CString, OsStr, OsString};
 use std::io::{Read, Write};
-use std::os::unix::ffi::OsStrExt as _;
+use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::path::{Path, PathBuf};
 
 use crate::io::{pipe_pair, Io};
@@ -330,8 +330,19 @@ impl Shell {
     fn eval_command(&mut self, cmd: &Command, job: &mut Job, io: Io) {
         match cmd {
             Command::Simple(args) => {
-                let args: Vec<CString> = args.iter().flat_map(|a| self.eval_args(a)).collect();
+                let mut args: Vec<CString> = args.iter().flat_map(|a| self.eval_args(a)).collect();
                 assert!(!args.is_empty());
+
+                if let Ok(arg0) = std::str::from_utf8(args[0].as_bytes()) {
+                    if let Some(alias_values) = self.env.aliases.get(arg0) {
+                        let mut actual_args: Vec<CString> = alias_values
+                            .iter()
+                            .map(|s| CString::new(s.as_bytes()).unwrap())
+                            .collect();
+                        actual_args.extend(args.drain(1..));
+                        std::mem::swap(&mut args, &mut actual_args);
+                    }
+                }
 
                 let exe = {
                     let arg0_os = OsStr::from_bytes(args[0].as_bytes());
@@ -558,6 +569,7 @@ impl Shell {
 
 #[derive(Debug, Clone)]
 pub struct Env {
+    aliases: HashMap<String, Vec<OsString>>,
     commands: HashMap<OsString, Executable>,
     env_vars: HashMap<OsString, OsString>,
     shell_vars: HashMap<String, String>,
@@ -566,6 +578,7 @@ pub struct Env {
 impl Env {
     pub fn new() -> Self {
         let mut env = Env {
+            aliases: HashMap::new(),
             commands: HashMap::new(),
             env_vars: std::env::vars_os().collect(),
             shell_vars: HashMap::new(),
@@ -634,9 +647,26 @@ impl Env {
             let overwrite = Executable::Builtin(BuiltinCommandImpl(builtin_overwrite));
             self.commands.insert(">".into(), overwrite);
 
-            // FIXME: this is just for ease of development
-            let jobs = Executable::Builtin(BuiltinCommandImpl(builtin_jobs));
-            self.commands.insert("j".into(), jobs);
+            let alias = Executable::Builtin(BuiltinCommandImpl(builtin_alias));
+            self.commands.insert("alias".into(), alias);
+        }
+
+        // FIXME: this is just for ease of development
+        {
+            self.aliases
+                .insert("j".to_owned(), vec![OsString::from("jobs")]);
+
+            self.aliases.insert(
+                "ls".to_owned(),
+                vec![
+                    OsString::from("ls"),
+                    OsString::from("--color=always"),
+                    OsString::from("-Fv"),
+                ],
+            );
+
+            self.aliases
+                .insert("cl".to_owned(), vec![OsString::from("clear")]);
         }
     }
 }
@@ -811,4 +841,28 @@ fn builtin_overwrite(_shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
             }
         }
     }
+}
+
+fn builtin_alias(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
+    debug_assert!(!args.is_empty());
+    if args.len() == 1 {
+        // % alias
+        for (alias, values) in shell.env.aliases.iter() {
+            println!("{} => {:?}", alias, values);
+        }
+        return 0;
+    } else if args[2].as_bytes() == b"=" {
+        // % alias foo = bar
+        if let Ok(name) = std::str::from_utf8(args[1].as_bytes()) {
+            let values: Vec<OsString> = args[3..]
+                .iter()
+                .map(|cs| OsString::from_vec(cs.as_bytes().to_vec()))
+                .collect();
+            shell.env.aliases.insert(name.to_owned(), values);
+            return 0;
+        }
+    }
+
+    let _ = writeln!(&mut io.error, "alias: invalid assignment");
+    1
 }
