@@ -372,8 +372,9 @@ impl Shell {
                 self.eval_str(s)
                     .split(|&b| {
                         // FIXME: support other whitespace characters
-                        b == b' '
+                        b == b' ' || b == b'\n' || b == b'\t'
                     })
+                    .filter(|chunk| !chunk.is_empty())
                     .map(|chunk| {
                         let bytes = chunk.to_vec();
                         CString::new(bytes).unwrap()
@@ -447,16 +448,19 @@ impl Shell {
 
                         wait::waitpid(child, None).expect("wait");
 
-                        // TODO: replace whitespaces inside the contents as well
-                        while let Some(&last) = arg_buf.last() {
-                            if last == b'\n' || last == b' ' {
-                                arg_buf.pop();
+                        for byte in arg_buf {
+                            if byte == b' ' || byte == b'\n' || byte == b'\t' {
+                                if !matches!(buf.last(), Some(b' ')) {
+                                    buf.push(b' ');
+                                }
                             } else {
-                                break;
+                                buf.push(byte);
                             }
                         }
 
-                        buf.extend(arg_buf);
+                        if !matches!(buf.last(), Some(b' ')) {
+                            buf.pop();
+                        }
                     }
 
                     Expansion::SubstPipeName(_list) => {
