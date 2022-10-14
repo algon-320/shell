@@ -51,7 +51,7 @@ fn main() {
                     break;
                 } else {
                     println!();
-                    println!("You have suspended jobs");
+                    println!("You have suspended jobs.");
                     continue;
                 }
             }
