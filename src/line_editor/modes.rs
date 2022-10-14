@@ -153,18 +153,15 @@ impl EditorMode for NormalMode {
             }
 
             "c" => {
-                match event {
-                    Event::Char('c') => {
-                        let whole_line: String = line.iter(..).map(|(ch, _)| ch).collect();
-                        cmds.push(Command::RegisterStore {
-                            reg: 'x',
-                            text: whole_line,
-                        });
+                if let Event::Char('c') = event {
+                    let whole_line: String = line.iter(..).map(|(ch, _)| ch).collect();
+                    cmds.push(Command::RegisterStore {
+                        reg: 'x',
+                        text: whole_line,
+                    });
 
-                        cmds.push(Command::DeleteLine);
-                        cmds.push(Command::ChangeModeToInsert);
-                    }
-                    _ => {}
+                    cmds.push(Command::DeleteLine);
+                    cmds.push(Command::ChangeModeToInsert);
                 }
                 self.combo.clear();
             }
