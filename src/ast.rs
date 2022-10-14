@@ -98,10 +98,10 @@ peg::parser! {
 
 
         pub rule command() -> Command
-        = sub:subshell()       { Command::SubShell(sub) }
-        / cmd:simple_command() { Command::Simple(cmd) }
+        = ws()* sub:subshell() ws()* { Command::SubShell(sub) }
+        / cmd:simple_command()       { Command::Simple(cmd) }
 
-        rule subshell() -> Box<List> = ws()* "(" list:list() ")" ws()* { list }
+        rule subshell() -> Box<List> = "(" list:list() ")" { list }
 
         rule simple_command() -> Vec<Arguments>
         = args:(arguments()+) { args }
