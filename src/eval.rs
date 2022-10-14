@@ -362,8 +362,8 @@ impl Shell {
 
     fn eval_args(&mut self, args: &Arguments) -> Vec<CString> {
         match args {
-            Arguments::Arg(s) => {
-                let bytes = self.eval_str(s);
+            Arguments::Arg(str_parts) => {
+                let bytes = self.eval_str(str_parts);
                 let cstring = CString::new(bytes).unwrap();
                 vec![cstring]
             }
