@@ -1,14 +1,14 @@
 mod line;
 mod modes;
 
-use line::*;
-use modes::*;
-
 use nix::libc::STDIN_FILENO;
 use nix::sys::termios;
 use nix::unistd;
 use std::collections::HashMap;
 use std::io::{stdout, Write as _};
+
+use line::*;
+use modes::*;
 
 #[derive(Debug, Clone, Copy)]
 enum Event {

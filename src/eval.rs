@@ -8,9 +8,8 @@ use std::io::{Read, Write};
 use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::path::{Path, PathBuf};
 
-use crate::io::{pipe_pair, Io};
-
 use crate::ast::*;
+use crate::io::{pipe_pair, Io};
 
 type Pgid = Pid;
 
