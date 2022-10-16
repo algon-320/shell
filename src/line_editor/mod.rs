@@ -53,10 +53,12 @@ enum Command {
     ChangeModeToVisualChar,
     ChangeModeToVisualLine,
     Insert(char),
-
     RegisterStore { reg: char, text: String },
     RegisterPastePrev { reg: char },
     RegisterPasteNext { reg: char },
+    MakeCheckPoint,
+    Undo,
+    Redo,
 }
 
 pub enum EditError {
@@ -67,14 +69,17 @@ pub enum EditError {
 pub struct LineEditor {
     mode: Mode,
     registers: HashMap<char, String>,
-    history: Vec<Line>,
+    line_history: Vec<Line>,
     temporal: Vec<Line>,
     row: isize,
+
+    undo_stack: Vec<Line>,
+    redo_stack: Vec<Line>,
 }
 
 impl Drop for LineEditor {
     fn drop(&mut self) {
-        // TODO: save `self.history` to a file
+        // TODO: save `self.line_history` to a file
     }
 }
 
@@ -85,9 +90,12 @@ impl LineEditor {
             registers: HashMap::new(),
 
             // TODO: restore saved history
-            history: Vec::new(),
+            line_history: Vec::new(),
             temporal: Vec::new(),
             row: 0,
+
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
         }
     }
 
@@ -210,12 +218,38 @@ impl LineEditor {
                 } else {
                     for ch in input.chars() {
                         match ch {
+                            '\x00' => event.push(Event::Ctrl('@')),
+                            '\x01' => event.push(Event::Ctrl('a')),
+                            '\x02' => event.push(Event::Ctrl('b')),
                             '\x03' => event.push(Event::Ctrl('c')),
                             '\x04' => event.push(Event::Ctrl('d')),
-                            '\x0d' => event.push(Event::KeyReturn),
+                            '\x05' => event.push(Event::Ctrl('e')),
+                            '\x06' => event.push(Event::Ctrl('f')),
+                            '\x07' => event.push(Event::Ctrl('g')),
+                            '\x08' => event.push(Event::Ctrl('h')),
                             '\x09' => event.push(Event::KeyTab),
-                            '\x1b' => event.push(Event::KeyEscape),
+                            '\x0a' => event.push(Event::Ctrl('j')),
+                            '\x0b' => event.push(Event::Ctrl('k')),
+                            '\x0c' => event.push(Event::Ctrl('l')),
+                            '\x0d' => event.push(Event::KeyReturn),
+                            '\x0e' => event.push(Event::Ctrl('n')),
+                            '\x0f' => event.push(Event::Ctrl('o')),
+                            '\x10' => event.push(Event::Ctrl('p')),
+                            '\x11' => event.push(Event::Ctrl('q')),
+                            '\x12' => event.push(Event::Ctrl('r')),
+                            '\x13' => event.push(Event::Ctrl('s')),
+                            '\x14' => event.push(Event::Ctrl('t')),
+                            '\x15' => event.push(Event::Ctrl('u')),
+                            '\x16' => event.push(Event::Ctrl('v')),
                             '\x17' => event.push(Event::Ctrl('w')),
+                            '\x18' => event.push(Event::Ctrl('x')),
+                            '\x19' => event.push(Event::Ctrl('y')),
+                            '\x1A' => event.push(Event::Ctrl('z')),
+                            '\x1b' => event.push(Event::KeyEscape),
+                            '\x1c' => event.push(Event::Ctrl('\\')),
+                            '\x1d' => event.push(Event::Ctrl(']')),
+                            '\x1e' => event.push(Event::Ctrl('^')),
+                            '\x1f' => event.push(Event::Ctrl('_')),
                             '\x7f' => event.push(Event::KeyBackspace),
                             ch if ch.is_control() => {}
                             _ => event.push(Event::Char(ch)),
@@ -263,10 +297,10 @@ impl LineEditor {
                             self.row = new_row;
                             current_line!().cursor_end_of_line();
                         } else {
-                            // copy from history
-                            let i = self.history.len() as isize + new_row;
+                            // copy from line_history
+                            let i = self.line_history.len() as isize + new_row;
                             if i >= 0 {
-                                let picked_line = self.history[i as usize].clone();
+                                let picked_line = self.line_history[i as usize].clone();
                                 self.temporal.insert(0, picked_line);
                                 self.row = new_row;
                                 current_line!().cursor_end_of_line();
@@ -342,6 +376,27 @@ impl LineEditor {
                             line.cursor_prev_char();
                         }
                     }
+
+                    Command::MakeCheckPoint => {
+                        let line = current_line!().clone();
+                        self.undo_stack.push(line);
+                        self.redo_stack.clear();
+                    }
+                    Command::Undo => {
+                        if self.undo_stack.len() >= 2 {
+                            let line = self.undo_stack.pop().unwrap();
+                            self.redo_stack.push(line);
+
+                            let line = self.undo_stack.last().unwrap();
+                            *current_line!() = line.clone();
+                        }
+                    }
+                    Command::Redo => {
+                        if let Some(line) = self.redo_stack.pop() {
+                            self.undo_stack.push(line.clone());
+                            *current_line!() = line;
+                        }
+                    }
                 }
 
                 if !self.mode.is_insert() {
@@ -352,15 +407,21 @@ impl LineEditor {
 
         let line = self.commit();
         let result = line.to_string();
-        self.history.push(line);
+        self.line_history.push(line);
         Ok(result)
     }
 
     fn new_line(&mut self) {
         self.mode = Mode::Insert(InsertMode::default());
+
+        let line = Line::new();
         self.temporal.clear();
-        self.temporal.push(Line::new());
+        self.temporal.push(line.clone());
         self.row = 0;
+
+        self.undo_stack.clear();
+        self.undo_stack.push(line);
+        self.redo_stack.clear();
     }
 
     fn commit(&mut self) -> Line {

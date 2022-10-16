@@ -94,21 +94,23 @@ impl EditorMode for NormalMode {
                 Event::Char('s') => {
                     let ch = line.char_at(line.cursor()).unwrap();
                     cmds.push(Command::RegisterStore {
-                        reg: 'x',
+                        reg: '"',
                         text: ch.to_string(),
                     });
 
                     cmds.push(Command::ChangeModeToInsert);
                     cmds.push(Command::DeleteNextChar);
+                    cmds.push(Command::MakeCheckPoint);
                 }
                 Event::Char('x') => {
                     let ch = line.char_at(line.cursor()).unwrap();
                     cmds.push(Command::RegisterStore {
-                        reg: 'x',
+                        reg: '"',
                         text: ch.to_string(),
                     });
 
                     cmds.push(Command::DeleteNextChar);
+                    cmds.push(Command::MakeCheckPoint);
                 }
 
                 Event::Char('d') => {
@@ -120,6 +122,7 @@ impl EditorMode for NormalMode {
                 Event::Char('S') => {
                     cmds.push(Command::DeleteLine);
                     cmds.push(Command::ChangeModeToInsert);
+                    cmds.push(Command::MakeCheckPoint);
                 }
 
                 Event::Char('c') => {
@@ -129,11 +132,30 @@ impl EditorMode for NormalMode {
                     // TODO
                 }
 
+                Event::Char('y') => {
+                    self.combo.push('y');
+                }
+                Event::Char('Y') => {
+                    cmds.push(Command::RegisterStore {
+                        reg: '"',
+                        text: line.to_string(),
+                    });
+                }
+
                 Event::Char('P') => {
-                    cmds.push(Command::RegisterPastePrev { reg: 'x' });
+                    cmds.push(Command::RegisterPastePrev { reg: '"' });
+                    cmds.push(Command::MakeCheckPoint);
                 }
                 Event::Char('p') => {
-                    cmds.push(Command::RegisterPasteNext { reg: 'x' });
+                    cmds.push(Command::RegisterPasteNext { reg: '"' });
+                    cmds.push(Command::MakeCheckPoint);
+                }
+
+                Event::Char('u') => {
+                    cmds.push(Command::Undo);
+                }
+                Event::Ctrl('r') => {
+                    cmds.push(Command::Redo);
                 }
 
                 _ => {}
@@ -141,27 +163,37 @@ impl EditorMode for NormalMode {
 
             "d" => {
                 if let Event::Char('d') = event {
-                    let whole_line: String = line.iter(..).map(|(ch, _)| ch).collect();
                     cmds.push(Command::RegisterStore {
-                        reg: 'x',
-                        text: whole_line,
+                        reg: '"',
+                        text: line.to_string(),
                     });
 
                     cmds.push(Command::DeleteLine);
+                    cmds.push(Command::MakeCheckPoint);
                 }
                 self.combo.clear();
             }
 
             "c" => {
                 if let Event::Char('c') = event {
-                    let whole_line: String = line.iter(..).map(|(ch, _)| ch).collect();
                     cmds.push(Command::RegisterStore {
-                        reg: 'x',
-                        text: whole_line,
+                        reg: '"',
+                        text: line.to_string(),
                     });
 
                     cmds.push(Command::DeleteLine);
                     cmds.push(Command::ChangeModeToInsert);
+                    cmds.push(Command::MakeCheckPoint);
+                }
+                self.combo.clear();
+            }
+
+            "y" => {
+                if let Event::Char('y') = event {
+                    cmds.push(Command::RegisterStore {
+                        reg: '"',
+                        text: line.to_string(),
+                    });
                 }
                 self.combo.clear();
             }
@@ -199,6 +231,7 @@ impl EditorMode for InsertMode {
             Event::KeyEscape => {
                 cmds.push(Command::CursorPrevChar);
                 cmds.push(Command::ChangeModeToNormal);
+                cmds.push(Command::MakeCheckPoint);
             }
 
             Event::KeyReturn => cmds.push(Command::Commit),
@@ -213,7 +246,7 @@ impl EditorMode for InsertMode {
             Event::Ctrl('w') => cmds.push(Command::DeletePrevWord),
 
             Event::KeyTab => {
-                //
+                // TODO: completion
             }
 
             _ => {}
@@ -285,21 +318,28 @@ impl EditorMode for VisualMode {
             }
 
             Event::Char('D') => {
-                let whole_line: String = line.iter(..).map(|(ch, _)| ch).collect();
                 cmds.push(Command::RegisterStore {
-                    reg: 'x',
-                    text: whole_line,
+                    reg: '"',
+                    text: line.to_string(),
                 });
 
                 cmds.push(Command::DeleteLine);
                 cmds.push(Command::ChangeModeToNormal);
+                cmds.push(Command::MakeCheckPoint);
             }
+            Event::Char('Y') => {
+                cmds.push(Command::RegisterStore {
+                    reg: '"',
+                    text: line.to_string(),
+                });
+                cmds.push(Command::ChangeModeToNormal);
+            }
+
             Event::Char('d') | Event::Char('x') => {
                 if self.is_line_mode() {
-                    let whole_line: String = line.iter(..).map(|(ch, _)| ch).collect();
                     cmds.push(Command::RegisterStore {
-                        reg: 'x',
-                        text: whole_line,
+                        reg: '"',
+                        text: line.to_string(),
                     });
 
                     cmds.push(Command::DeleteLine);
@@ -313,21 +353,21 @@ impl EditorMode for VisualMode {
 
                     let part: String = line.iter(from..to).map(|(ch, _)| ch).collect();
                     cmds.push(Command::RegisterStore {
-                        reg: 'x',
+                        reg: '"',
                         text: part,
                     });
 
                     cmds.push(Command::DeleteRange { from, to });
                 }
                 cmds.push(Command::ChangeModeToNormal);
+                cmds.push(Command::MakeCheckPoint);
             }
             Event::Char('c') | Event::Char('s') => {
                 cmds.push(Command::ChangeModeToInsert);
                 if self.is_line_mode() {
-                    let whole_line: String = line.iter(..).map(|(ch, _)| ch).collect();
                     cmds.push(Command::RegisterStore {
-                        reg: 'x',
-                        text: whole_line,
+                        reg: '"',
+                        text: line.to_string(),
                     });
 
                     cmds.push(Command::DeleteLine);
@@ -341,12 +381,37 @@ impl EditorMode for VisualMode {
 
                     let part: String = line.iter(from..to).map(|(ch, _)| ch).collect();
                     cmds.push(Command::RegisterStore {
-                        reg: 'x',
+                        reg: '"',
                         text: part,
                     });
 
                     cmds.push(Command::DeleteRange { from, to });
                 }
+                cmds.push(Command::MakeCheckPoint);
+            }
+            Event::Char('y') => {
+                if self.is_line_mode() {
+                    cmds.push(Command::RegisterStore {
+                        reg: '"',
+                        text: line.to_string(),
+                    });
+
+                    cmds.push(Command::DeleteLine);
+                } else {
+                    let mut from = self.origin as usize;
+                    let mut to = line.cursor();
+                    if from > to {
+                        std::mem::swap(&mut from, &mut to);
+                    }
+                    to += 1; // make it half-opened
+
+                    let part: String = line.iter(from..to).map(|(ch, _)| ch).collect();
+                    cmds.push(Command::RegisterStore {
+                        reg: '"',
+                        text: part,
+                    });
+                }
+                cmds.push(Command::ChangeModeToNormal);
             }
 
             _ => {}
