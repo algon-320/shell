@@ -1,3 +1,13 @@
+fn char_class(ch: char) -> i32 {
+    if ch.is_whitespace() {
+        0
+    } else if ch.is_alphanumeric() || ch == '_' {
+        1
+    } else {
+        2
+    }
+}
+
 #[derive(Clone)]
 pub struct Line {
     buf: Vec<(char, usize)>,
@@ -60,15 +70,20 @@ impl Line {
     pub fn delete_word(&mut self) {
         // remove trailing whitespaces
         while self.cursor > 0 {
-            if !self.buf[self.cursor - 1].0.is_whitespace() {
+            if char_class(self.buf[self.cursor - 1].0) != 0 {
                 break;
             }
             self.delete_prev();
         }
 
+        if self.cursor == 0 {
+            return;
+        }
+
         // remove a single word
+        let word_class = char_class(self.buf[self.cursor - 1].0);
         while self.cursor > 0 {
-            if self.buf[self.cursor - 1].0.is_whitespace() {
+            if char_class(self.buf[self.cursor - 1].0) != word_class {
                 break;
             }
             self.delete_prev();
@@ -131,54 +146,75 @@ impl Line {
         }
     }
 
-    pub fn cursor_prev_word_head(&mut self, _wide: bool) {
+    pub fn cursor_prev_word_head(&mut self, wide: bool) {
         while self.cursor > 0 {
-            if !self.buf[self.cursor - 1].0.is_whitespace() {
+            if char_class(self.buf[self.cursor - 1].0) != 0 {
                 break;
             }
             self.cursor -= 1;
         }
 
+        if self.cursor == 0 {
+            return;
+        }
+
+        let word_class = char_class(self.buf[self.cursor - 1].0);
         while self.cursor > 0 {
-            if self.buf[self.cursor - 1].0.is_whitespace() {
+            let ch = self.buf[self.cursor - 1].0;
+            if (wide && char_class(ch) == 0) || (!wide && char_class(ch) != word_class) {
                 break;
             }
             self.cursor -= 1;
         }
     }
 
-    pub fn cursor_next_word_head(&mut self, _wide: bool) {
+    pub fn cursor_next_word_head(&mut self, wide: bool) {
         let len = self.buf.len();
 
+        if self.cursor == len {
+            return;
+        }
+
+        let word_class = char_class(self.buf[self.cursor].0);
         while self.cursor + 1 < len {
-            if self.buf[self.cursor].0.is_whitespace() {
+            let ch = self.buf[self.cursor].0;
+            if (wide && char_class(ch) == 0) || (!wide && char_class(ch) != word_class) {
                 break;
             }
             self.cursor += 1;
         }
 
         while self.cursor + 1 < len {
-            if !self.buf[self.cursor].0.is_whitespace() {
+            if char_class(self.buf[self.cursor].0) != 0 {
                 break;
             }
             self.cursor += 1;
         }
     }
 
-    pub fn cursor_next_word_end(&mut self, _wide: bool) {
+    pub fn cursor_next_word_end(&mut self, wide: bool) {
         self.cursor_next_char();
 
         let len = self.buf.len();
 
         while self.cursor + 1 < len {
-            if !self.buf[self.cursor].0.is_whitespace() {
+            if char_class(self.buf[self.cursor].0) != 0 {
                 break;
             }
             self.cursor += 1;
         }
 
+        if self.cursor == self.buf.len() {
+            return;
+        }
+
+        let word_class = char_class(self.buf[self.cursor].0);
+
         while self.cursor + 1 < len {
-            if self.buf[self.cursor + 1].0.is_whitespace() {
+            let next_char = self.buf[self.cursor + 1].0;
+            if (wide && char_class(next_char) == 0)
+                || (!wide && char_class(next_char) != word_class)
+            {
                 break;
             }
             self.cursor += 1;
