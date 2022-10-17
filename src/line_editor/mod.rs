@@ -176,7 +176,7 @@ impl LineEditor {
                     }
 
                     if highlight {
-                        print!("\x1b[42m{ch}\x1b[m");
+                        print!("\x1b[100;97m{ch}\x1b[m");
                     } else {
                         print!("{ch}");
                     }
