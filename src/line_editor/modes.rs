@@ -116,20 +116,38 @@ impl EditorMode for NormalMode {
                 Event::Char('d') => {
                     self.combo.push('d');
                 }
+                Event::Char('c') => {
+                    self.combo.push('c');
+                }
+
                 Event::Char('D') => {
-                    // TODO
+                    let from = line.cursor();
+                    let to = line.len();
+                    let cursor_to_end: String = line.iter(from..to).map(|(c, _)| c).collect();
+                    cmds.push(Command::RegisterStore {
+                        reg: '"',
+                        text: cursor_to_end,
+                    });
+                    cmds.push(Command::DeleteRange { from, to });
+                    cmds.push(Command::MakeCheckPoint);
+                }
+                Event::Char('C') => {
+                    let from = line.cursor();
+                    let to = line.len();
+                    let cursor_to_end: String = line.iter(from..to).map(|(c, _)| c).collect();
+                    cmds.push(Command::RegisterStore {
+                        reg: '"',
+                        text: cursor_to_end,
+                    });
+
+                    cmds.push(Command::ChangeModeToInsert);
+                    cmds.push(Command::DeleteRange { from, to });
+                    cmds.push(Command::MakeCheckPoint);
                 }
                 Event::Char('S') => {
                     cmds.push(Command::DeleteLine);
                     cmds.push(Command::ChangeModeToInsert);
                     cmds.push(Command::MakeCheckPoint);
-                }
-
-                Event::Char('c') => {
-                    self.combo.push('c');
-                }
-                Event::Char('C') => {
-                    // TODO
                 }
 
                 Event::Char('y') => {
@@ -325,6 +343,16 @@ impl EditorMode for VisualMode {
 
                 cmds.push(Command::DeleteLine);
                 cmds.push(Command::ChangeModeToNormal);
+                cmds.push(Command::MakeCheckPoint);
+            }
+            Event::Char('C') | Event::Char('S') => {
+                cmds.push(Command::RegisterStore {
+                    reg: '"',
+                    text: line.to_string(),
+                });
+
+                cmds.push(Command::ChangeModeToInsert);
+                cmds.push(Command::DeleteLine);
                 cmds.push(Command::MakeCheckPoint);
             }
             Event::Char('Y') => {

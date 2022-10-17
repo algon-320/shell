@@ -46,6 +46,10 @@ impl Line {
         self.cursor
     }
 
+    pub fn len(&self) -> usize {
+        self.buf.len()
+    }
+
     pub fn insert(&mut self, ch: char) {
         use unicode_width::UnicodeWidthChar as _;
         let width = ch.width().unwrap_or(1);
