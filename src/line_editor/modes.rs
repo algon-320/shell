@@ -262,6 +262,7 @@ impl EditorMode for InsertMode {
             Event::KeyBackspace => cmds.push(Command::DeletePrevChar),
             Event::KeyDelete => cmds.push(Command::DeleteNextChar),
             Event::Ctrl('w') => cmds.push(Command::DeletePrevWord),
+            Event::Ctrl('u') => cmds.push(Command::DeleteLine),
 
             Event::KeyTab => {
                 // TODO: completion
