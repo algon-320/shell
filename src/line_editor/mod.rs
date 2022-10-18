@@ -460,7 +460,7 @@ impl LineEditor {
                         // update completion candidates
                         if (last_command != Command::TryCompleteFilename
                             && last_command != Command::DisplayCompletionCandidate)
-                            || (last_candidates.len() == 1 && last_candidates[0].ends_with("/"))
+                            || (last_candidates.len() == 1 && last_candidates[0].ends_with('/'))
                         {
                             last_completion_len = 0;
 
@@ -473,7 +473,7 @@ impl LineEditor {
                         }
 
                         let mut comp = String::new();
-                        if last_candidates.len() > 0 {
+                        if !last_candidates.is_empty() {
                             let next = last_candidates.remove(0);
                             last_candidates.push(next.clone());
                             comp = next;
@@ -496,7 +496,7 @@ impl LineEditor {
                         // update completion candidates
                         if (last_command != Command::TryCompleteFilename
                             && last_command != Command::DisplayCompletionCandidate)
-                            || (last_candidates.len() == 1 && last_candidates[0].ends_with("/"))
+                            || (last_candidates.len() == 1 && last_candidates[0].ends_with('/'))
                         {
                             last_completion_len = 0;
 

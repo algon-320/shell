@@ -12,7 +12,7 @@ impl FileCompletion {
     }
 
     pub fn candidates(&self, partial: &str) -> Vec<String> {
-        self.find(partial).unwrap_or_else(Vec::new)
+        self.find(partial).unwrap_or_default()
     }
 
     fn find(&self, partial: &str) -> Option<Vec<String>> {
