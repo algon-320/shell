@@ -50,6 +50,24 @@ impl Line {
         self.buf.len()
     }
 
+    pub fn last_word(&self, wide: bool) -> Option<String> {
+        let word_class = char_class(self.buf.last()?.0);
+        if word_class == 0 {
+            return None;
+        }
+
+        let mut i = self.buf.len() - 1;
+        while i > 0 {
+            let class = char_class(self.buf[i - 1].0);
+            if (wide && class == 0) || (!wide && class != word_class) {
+                break;
+            }
+            i -= 1;
+        }
+
+        Some(self.buf[i..].iter().map(|(ch, _)| ch).collect::<String>())
+    }
+
     pub fn insert(&mut self, ch: char) {
         use unicode_width::UnicodeWidthChar as _;
         let width = ch.width().unwrap_or(1);

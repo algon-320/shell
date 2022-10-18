@@ -264,9 +264,8 @@ impl EditorMode for InsertMode {
             Event::Ctrl('w') => cmds.push(Command::DeletePrevWord),
             Event::Ctrl('u') => cmds.push(Command::DeleteLine),
 
-            Event::KeyTab => {
-                // TODO: completion
-            }
+            Event::KeyTab => cmds.push(Command::TryCompleteFilename),
+            Event::Ctrl('d') => cmds.push(Command::DisplayCompletionCandidate),
 
             _ => {}
         }

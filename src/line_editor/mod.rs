@@ -1,3 +1,4 @@
+mod completion;
 mod line;
 mod modes;
 
@@ -25,7 +26,7 @@ enum Event {
     Char(char),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 enum Command {
     CursorPrevChar,
     CursorPrevCharMatch(char),
@@ -59,6 +60,8 @@ enum Command {
     MakeCheckPoint,
     Undo,
     Redo,
+    TryCompleteFilename,
+    DisplayCompletionCandidate,
 }
 
 pub enum EditError {
@@ -120,6 +123,11 @@ impl LineEditor {
         }
 
         self.new_line();
+
+        let file_completion = completion::FileCompletion::new_cwd();
+        let mut last_candidates: Vec<String> = Vec::new();
+        let mut last_completion_len: usize = 0;
+        let mut last_command = Command::Commit;
 
         // Save cursor
         print!("\x1b7");
@@ -262,7 +270,10 @@ impl LineEditor {
             for ev in event {
                 match (&mut self.mode, ev) {
                     (_, Event::Ctrl('c')) => return Err(EditError::Aborted),
-                    (_, Event::Ctrl('d')) => return Err(EditError::Exitted),
+                    (_, Event::Ctrl('d')) if current_line!().len() == 0 => {
+                        return Err(EditError::Exitted);
+                    }
+
                     (Mode::Insert(state), ev) => {
                         state.process_event(ev, current_line!(), &mut commands);
                     }
@@ -276,7 +287,7 @@ impl LineEditor {
             }
 
             for cmd in commands {
-                match cmd {
+                match cmd.clone() {
                     Command::ChangeModeToNormal => {
                         self.mode = Mode::Normal(NormalMode::default());
                     }
@@ -397,11 +408,75 @@ impl LineEditor {
                             *current_line!() = line;
                         }
                     }
+
+                    Command::TryCompleteFilename => {
+                        // update completion candidates
+                        if (last_command != Command::TryCompleteFilename
+                            && last_command != Command::DisplayCompletionCandidate)
+                            || (last_candidates.len() == 1 && last_candidates[0].ends_with("/"))
+                        {
+                            last_completion_len = 0;
+
+                            if let Some(part) = current_line!().last_word(true) {
+                                let cand = file_completion.candidates(&part);
+                                last_candidates = cand;
+                            } else {
+                                last_candidates.clear();
+                            }
+                        }
+
+                        let mut comp = String::new();
+                        if last_candidates.len() > 0 {
+                            let next = last_candidates.remove(0);
+                            last_candidates.push(next.clone());
+                            comp = next;
+                        }
+
+                        let line = current_line!();
+                        for _ in 0..last_completion_len {
+                            line.delete_prev();
+                        }
+
+                        let mut comp_len = 0;
+                        for ch in comp.chars() {
+                            current_line!().insert(ch);
+                            comp_len += 1;
+                        }
+
+                        last_completion_len = comp_len;
+                    }
+                    Command::DisplayCompletionCandidate => {
+                        // update completion candidates
+                        if (last_command != Command::TryCompleteFilename
+                            && last_command != Command::DisplayCompletionCandidate)
+                            || (last_candidates.len() == 1 && last_candidates[0].ends_with("/"))
+                        {
+                            last_completion_len = 0;
+
+                            if let Some(part) = current_line!().last_word(true) {
+                                let cand = file_completion.candidates(&part);
+                                last_candidates = cand;
+                            } else {
+                                last_candidates.clear();
+                            }
+                        }
+
+                        if let Some(prefix) = current_line!().last_word(true) {
+                            print!("\r\n");
+                            for cand in last_candidates.iter() {
+                                print!("{prefix}{cand}\t");
+                            }
+                            print!("\r\n");
+                            stdout().flush().unwrap();
+                        }
+                    }
                 }
 
                 if !self.mode.is_insert() {
                     current_line!().normal_mode_fix_cursor();
                 }
+
+                last_command = cmd;
             }
         }
 

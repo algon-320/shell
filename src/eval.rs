@@ -600,8 +600,8 @@ impl Env {
         for path in std::env::split_paths(&path_value) {
             let entries = match std::fs::read_dir(&path) {
                 Ok(ents) => ents,
-                Err(err) => {
-                    eprintln!("{err}");
+                Err(_err) => {
+                    // eprintln!("{err}");
                     continue;
                 }
             };
@@ -609,8 +609,8 @@ impl Env {
             for ent in entries {
                 let ent = match ent {
                     Ok(e) => e,
-                    Err(err) => {
-                        eprintln!("{err}");
+                    Err(_err) => {
+                        // eprintln!("{err}");
                         continue;
                     }
                 };
