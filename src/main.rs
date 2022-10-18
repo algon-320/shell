@@ -2,9 +2,10 @@ mod ast;
 mod eval;
 mod io;
 mod line_editor;
+mod terminal_size;
 
 fn main() {
-    use std::io::{stdout, Write as _};
+    terminal_size::init();
 
     let mut line_editor = line_editor::LineEditor::new();
     let mut shell = eval::Shell::new();
@@ -12,32 +13,30 @@ fn main() {
 
     loop {
         let status = if last_status == 0 {
-            format!("\x1b[32m{:3}\x1b[m", last_status)
+            format!("(\x1b[32m){:3}(\x1b[m)", last_status)
         } else {
-            format!("\x1b[31m{:3}\x1b[m", last_status)
+            format!("(\x1b[31m){:3}(\x1b[m)", last_status)
         };
 
         let extra_status = if last_status >= 128 {
             format!(
-                ":\x1b[33m{}\x1b[m",
+                ":(\x1b[33m){}(\x1b[m)",
                 nix::sys::signal::Signal::try_from(last_status - 128).unwrap()
             )
         } else {
             "".to_owned()
         };
 
-        print!("[{}{}] ", status, extra_status);
-
         let job_status = match shell.jobs() {
             0 => "".to_owned(),
             1 => "*".to_owned(),
             num => format!("*{num}"),
         };
-        print!("{}", job_status);
-        stdout().flush().unwrap();
+
+        let prompt_prefix = format!("[{}{}] {}", status, extra_status, job_status);
 
         use line_editor::EditError;
-        let line = match line_editor.read_line() {
+        let line = match line_editor.read_line(prompt_prefix) {
             Ok(line) => {
                 println!();
                 line

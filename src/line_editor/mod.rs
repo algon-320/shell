@@ -8,6 +8,7 @@ use nix::unistd;
 use std::collections::HashMap;
 use std::io::{stdout, Write as _};
 
+use crate::terminal_size;
 use line::*;
 use modes::*;
 
@@ -102,7 +103,43 @@ impl LineEditor {
         }
     }
 
-    pub fn read_line(&mut self) -> Result<String, EditError> {
+    pub fn read_line(&mut self, prompt_prefix: String) -> Result<String, EditError> {
+        let (prompt_prefix, prompt_prefix_length) = {
+            let mut buf = String::new();
+            let mut len = 0;
+
+            let mut ignore = 0;
+            let mut escaped = false;
+
+            for ch in prompt_prefix.chars() {
+                if !escaped && ch == '\\' {
+                    escaped = true;
+                    continue;
+                }
+
+                if !escaped && ch == '(' {
+                    ignore += 1;
+                }
+
+                if escaped || (ch != '(' && ch != ')') {
+                    buf.push(ch);
+                }
+
+                if ignore == 0 {
+                    use unicode_width::UnicodeWidthChar as _;
+                    len += ch.width().unwrap_or(1);
+                }
+
+                if !escaped && ch == ')' {
+                    ignore -= 1;
+                }
+
+                escaped = false;
+            }
+
+            (buf, len)
+        };
+
         let saved_termios = enable_raw_mode();
 
         let _defer = Defer::new(|| {
@@ -137,15 +174,15 @@ impl LineEditor {
         'edit: loop {
             {
                 // TODO: support multi-line editing
-
                 let line = current_line!();
 
                 // Restore cursor
                 print!("\x1b8");
 
                 // Erase lines
-                print!("\x1b[J");
+                print!("\x1b[K");
 
+                print!("{prompt_prefix}");
                 match self.mode {
                     Mode::Insert(..) => {
                         print!("\x1b[36;1m%\x1b[m ");
@@ -175,7 +212,15 @@ impl LineEditor {
                     }
                 };
 
-                for (i, (ch, _)) in line.iter(..).enumerate() {
+                let terminal_width = terminal_size::get_cols() as usize;
+                let mut line_length = prompt_prefix_length + 2; // FIXME
+
+                for (i, (ch, width)) in line.iter(..).enumerate() {
+                    line_length += width;
+                    if line_length > terminal_width {
+                        break;
+                    }
+
                     let mut highlight = false;
                     if let Some(hl) = hl_range {
                         if hl.0 <= i && i < hl.1 {
@@ -191,7 +236,9 @@ impl LineEditor {
                 }
 
                 print!("\x1b8");
-                let cursor_step = 2 + line.iter(..).take(line.cursor()).fold(0, |a, (_, w)| a + w);
+                let cursor_step = prompt_prefix_length
+                    + 2
+                    + line.iter(..).take(line.cursor()).fold(0, |a, (_, w)| a + w);
                 if cursor_step > 0 {
                     print!("\x1b[{}C", cursor_step);
                 }
@@ -462,7 +509,7 @@ impl LineEditor {
                         }
 
                         if let Some(prefix) = current_line!().last_word(true) {
-                            print!("\r\n");
+                            print!("\r\n\x1b[J");
                             for cand in last_candidates.iter() {
                                 print!("{prefix}{cand}\t");
                             }
