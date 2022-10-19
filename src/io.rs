@@ -3,9 +3,17 @@ use nix::unistd;
 use std::io::{Read, Write};
 use std::os::unix::io::RawFd;
 
+fn set_cloexec(fd: RawFd) {
+    use nix::fcntl::{fcntl, FcntlArg, OFlag};
+    let old_flags = OFlag::from_bits(fcntl(fd, FcntlArg::F_GETFL).expect("GETFL")).unwrap();
+    let new_flags = old_flags | OFlag::O_CLOEXEC;
+    fcntl(fd, FcntlArg::F_SETFL(new_flags)).expect("set O_CLOEXEC");
+}
+
 pub fn pipe_pair() -> (FdRead, FdWrite) {
-    let flags = nix::fcntl::OFlag::O_CLOEXEC;
-    let (pipe_out, pipe_in) = unistd::pipe2(flags).expect("pipe2");
+    let (pipe_out, pipe_in) = unistd::pipe().expect("pipe");
+    set_cloexec(pipe_out);
+    set_cloexec(pipe_in);
     (FdRead(pipe_out), FdWrite(pipe_in))
 }
 
