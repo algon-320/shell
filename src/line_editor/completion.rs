@@ -17,20 +17,20 @@ impl FileCompletion {
 
     fn find(&self, partial: &str) -> Option<Vec<String>> {
         let mut path = self.base_dir.clone()?;
-        let partial = Path::new(partial);
-        if partial.is_relative() {
-            path.extend(partial);
+        let partial_path = Path::new(partial);
+        if partial_path.is_relative() {
+            path.extend(partial_path);
         } else {
-            path = partial.to_owned();
+            path = partial_path.to_owned();
         }
 
-        let dir_name = if path.is_dir() {
+        let dir_name = if partial.ends_with(std::path::MAIN_SEPARATOR) {
             path.as_path()
         } else {
             path.parent()?
         };
 
-        let file_name = if path.is_dir() {
+        let file_name = if partial.ends_with(std::path::MAIN_SEPARATOR) {
             ""
         } else {
             path.file_name()?.to_str()?
@@ -52,7 +52,10 @@ impl FileCompletion {
 
         // append a slash if there is a single candidate
         if candidates.len() == 1 && is_dir[0] {
-            candidates.last_mut().unwrap().push('/');
+            candidates
+                .last_mut()
+                .unwrap()
+                .push(std::path::MAIN_SEPARATOR);
         }
 
         Some(candidates)

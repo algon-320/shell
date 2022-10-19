@@ -460,7 +460,8 @@ impl LineEditor {
                         // update completion candidates
                         if (last_command != Command::TryCompleteFilename
                             && last_command != Command::DisplayCompletionCandidate)
-                            || (last_candidates.len() == 1 && last_candidates[0].ends_with('/'))
+                            || (last_candidates.len() == 1
+                                && last_candidates[0].ends_with(std::path::MAIN_SEPARATOR))
                         {
                             last_completion_len = 0;
 
@@ -494,9 +495,6 @@ impl LineEditor {
                     }
                     Command::DisplayCompletionCandidate => {
                         // update completion candidates
-                        if (last_command != Command::TryCompleteFilename
-                            && last_command != Command::DisplayCompletionCandidate)
-                            || (last_candidates.len() == 1 && last_candidates[0].ends_with('/'))
                         {
                             last_completion_len = 0;
 
@@ -526,6 +524,8 @@ impl LineEditor {
                 last_command = cmd;
             }
         }
+
+        print!("\x1b[J");
 
         let line = self.commit();
         let result = line.to_string();
