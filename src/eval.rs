@@ -403,13 +403,12 @@ impl Shell {
 
                 StrPart::Expansion(expansion) => match expansion {
                     Expansion::Variable { name } => {
-                        let value = self
-                            .env
-                            .shell_vars
-                            .get(name)
-                            .map(String::as_str)
-                            .unwrap_or("");
-                        buf.extend_from_slice(value.as_bytes());
+                        let name = OsStr::new(name);
+                        if let Some(value) = self.env.shell_vars.get(name) {
+                            buf.extend_from_slice(value.as_bytes());
+                        } else if let Some(value) = self.env.env_vars.get(name) {
+                            buf.extend_from_slice(value.as_bytes());
+                        }
                     }
 
                     Expansion::SubstStdout(list)
@@ -570,7 +569,7 @@ pub struct Env {
     aliases: HashMap<OsString, Vec<OsString>>,
     commands: HashMap<OsString, Executable>,
     env_vars: HashMap<OsString, OsString>,
-    shell_vars: HashMap<String, String>,
+    shell_vars: HashMap<OsString, OsString>,
 }
 
 impl Env {
@@ -647,6 +646,12 @@ impl Env {
 
             let alias = Executable::Builtin(BuiltinCommandImpl(builtin_alias));
             self.commands.insert("alias".into(), alias);
+
+            let var = Executable::Builtin(BuiltinCommandImpl(builtin_var));
+            self.commands.insert("var".into(), var);
+
+            let export = Executable::Builtin(BuiltinCommandImpl(builtin_export));
+            self.commands.insert("export".into(), export);
         }
 
         // FIXME: this is just for ease of development
@@ -863,4 +868,39 @@ fn builtin_alias(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
 
     let _ = writeln!(&mut io.error, "alias: invalid assignment");
     1
+}
+
+fn builtin_var(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
+    debug_assert!(!args.is_empty());
+
+    if args.len() == 1 {
+        for (key, val) in shell.env.shell_vars.iter() {
+            println!("{:?} => {:?}", key, val);
+        }
+        return 0;
+    } else if args.len() == 4 && args[2].as_bytes() == b"=" {
+        let key = OsString::from_vec(args[1].as_bytes().to_vec());
+        let val = OsString::from_vec(args[3].as_bytes().to_vec());
+        shell.env.shell_vars.insert(key, val);
+        return 0;
+    }
+
+    let _ = writeln!(&mut io.error, "var: invalid assignment");
+    1
+}
+
+fn builtin_export(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
+    debug_assert!(!args.is_empty());
+
+    let mut status = 0;
+    for arg in args[1..].iter() {
+        let name = OsStr::from_bytes(arg.as_bytes());
+        if let Some(value) = shell.env.shell_vars.get(name) {
+            shell.env.env_vars.insert(name.to_owned(), value.to_owned());
+        } else {
+            let _ = writeln!(&mut io.error, "export: variable {:?} is undefined", name);
+            status = 1;
+        }
+    }
+    status
 }
