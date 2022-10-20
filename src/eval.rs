@@ -700,6 +700,12 @@ fn builtin_cd(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
         let _ = writeln!(&mut io.error, "cd: {err}");
         1
     } else {
+        if let Ok(cwd) = std::env::current_dir() {
+            shell
+                .env
+                .env_vars
+                .insert(OsString::from("PWD"), cwd.into_os_string());
+        }
         0
     }
 }
