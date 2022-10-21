@@ -1,15 +1,16 @@
 use super::*;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(super) enum Mode {
     Insert(InsertMode),
+    Search(SearchMode),
     Normal(NormalMode),
     Visual(VisualMode),
 }
 
 impl Mode {
     pub fn is_insert(&self) -> bool {
-        matches!(self, Mode::Insert(..))
+        matches!(self, Mode::Insert(..) | Mode::Search(..))
     }
 }
 
@@ -360,6 +361,83 @@ impl EditorMode for NormalMode {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub(super) struct SearchMode {
+    query: Line,
+}
+
+impl SearchMode {
+    pub fn new() -> Self {
+        Self { query: Line::new() }
+    }
+
+    pub fn query(&self) -> String {
+        self.query.to_string()
+    }
+}
+
+impl EditorMode for SearchMode {
+    fn process_event(&mut self, event: Event, _line: &Line, cmds: &mut Vec<Command>) {
+        match event {
+            Event::KeyEscape | Event::KeyTab | Event::Ctrl('u') | Event::Ctrl('d') => {
+                cmds.push(Command::ChangeModeToInsert);
+            }
+
+            Event::KeyReturn => {
+                cmds.push(Command::ChangeModeToInsert);
+                cmds.push(Command::Commit);
+            }
+            Event::KeyLeft => {
+                cmds.push(Command::ChangeModeToInsert);
+                cmds.push(Command::CursorPrevChar);
+            }
+            Event::KeyRight => {
+                cmds.push(Command::ChangeModeToInsert);
+                cmds.push(Command::CursorNextChar);
+            }
+            Event::KeyUp => {
+                cmds.push(Command::ChangeModeToInsert);
+                cmds.push(Command::HistoryPrev);
+            }
+            Event::KeyDown => {
+                cmds.push(Command::ChangeModeToInsert);
+                cmds.push(Command::HistoryNext);
+            }
+
+            Event::Char(ch) => {
+                self.query.insert(ch);
+                cmds.push(Command::HistorySearch {
+                    query: self.query.to_string(),
+                    reset: true,
+                });
+            }
+            Event::KeyBackspace => {
+                self.query.delete_prev();
+                cmds.push(Command::HistorySearch {
+                    query: self.query.to_string(),
+                    reset: true,
+                });
+            }
+            Event::Ctrl('w') => {
+                self.query.delete_word();
+                cmds.push(Command::HistorySearch {
+                    query: self.query.to_string(),
+                    reset: true,
+                });
+            }
+
+            Event::Ctrl('r') => {
+                cmds.push(Command::HistorySearch {
+                    query: self.query.to_string(),
+                    reset: false,
+                });
+            }
+
+            _ => {}
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(super) struct InsertMode;
 
@@ -387,6 +465,10 @@ impl EditorMode for InsertMode {
             Event::Ctrl('d') => cmds.push(Command::DisplayCompletionCandidate),
 
             Event::Ctrl('p') => cmds.push(Command::CdToParent),
+
+            Event::Ctrl('r') => {
+                cmds.push(Command::ChangeModeToSearch);
+            }
 
             _ => {}
         }

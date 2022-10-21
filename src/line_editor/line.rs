@@ -31,7 +31,7 @@ impl From<char> for CharClass {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Line {
     buf: Vec<(char, usize)>,
     cursor: usize,
@@ -43,6 +43,22 @@ impl std::fmt::Display for Line {
             write!(f, "{}", ch)?;
         }
         Ok(())
+    }
+}
+
+impl<'a> From<&'a str> for Line {
+    fn from(s: &'a str) -> Self {
+        Self {
+            buf: s
+                .chars()
+                .map(|ch| {
+                    use unicode_width::UnicodeWidthChar as _;
+                    let w = ch.width().unwrap_or(1);
+                    (ch, w)
+                })
+                .collect(),
+            cursor: 0,
+        }
     }
 }
 

@@ -45,6 +45,7 @@ enum Command {
     CursorExact(usize),
     HistoryPrev,
     HistoryNext,
+    HistorySearch { query: String, reset: bool },
     DeletePrevChar,
     DeleteNextChar,
     DeletePrevWord,
@@ -55,6 +56,7 @@ enum Command {
     ChangeModeToNormal,
     ChangeModeToVisualChar,
     ChangeModeToVisualLine,
+    ChangeModeToSearch,
     Insert(char),
     RegisterStore { reg: char, text: String },
     RegisterPastePrev { reg: char },
@@ -80,6 +82,7 @@ pub struct LineEditor {
     line_history: Vec<Line>,
     temporal: Vec<Line>,
     row: isize,
+    history_search_start_idx: usize,
 
     undo_stack: Vec<Line>,
     redo_stack: Vec<Line>,
@@ -101,6 +104,7 @@ impl LineEditor {
             line_history: Vec::new(),
             temporal: Vec::new(),
             row: 0,
+            history_search_start_idx: 0,
 
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -197,10 +201,13 @@ impl LineEditor {
                     Mode::Visual(..) => {
                         print!("\x1b[32;1m%\x1b[m ");
                     }
+                    Mode::Search(..) => {
+                        print!("\x1b[38;5;209;1m%\x1b[m ");
+                    }
                 }
 
-                let hl_range = {
-                    if let Mode::Visual(vis_mode) = &self.mode {
+                let hl_range = match &self.mode {
+                    Mode::Visual(vis_mode) => {
                         if let Some(origin) = vis_mode.origin() {
                             let mut i = origin as usize;
                             let mut j = line.cursor();
@@ -211,9 +218,21 @@ impl LineEditor {
                         } else {
                             Some((0, usize::MAX))
                         }
-                    } else {
-                        None
                     }
+                    Mode::Search(search_mode) => {
+                        let query = search_mode.query();
+                        // FIXME
+                        let s = line.to_string();
+                        if let Some(i) = s.find(&query) {
+                            let from = s[..i].chars().count();
+                            let len = query.chars().count();
+                            let to = from + len;
+                            Some((from, to))
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
                 };
 
                 let terminal_width = terminal_size::get_cols() as usize;
@@ -248,7 +267,7 @@ impl LineEditor {
                 }
 
                 // change cursor shape
-                if matches!(self.mode, Mode::Insert(..)) {
+                if self.mode.is_insert() {
                     print!("\x1b[6 q"); // bar cursor
                 } else {
                     print!("\x1b[2 q"); // block cursor
@@ -325,14 +344,17 @@ impl LineEditor {
                         return Err(EditError::Exitted);
                     }
 
-                    (Mode::Insert(state), ev) => {
-                        state.process_event(ev, current_line!(), &mut commands);
+                    (Mode::Insert(mode), ev) => {
+                        mode.process_event(ev, current_line!(), &mut commands);
                     }
-                    (Mode::Normal(state), ev) => {
-                        state.process_event(ev, current_line!(), &mut commands);
+                    (Mode::Normal(mode), ev) => {
+                        mode.process_event(ev, current_line!(), &mut commands);
                     }
-                    (Mode::Visual(state), ev) => {
-                        state.process_event(ev, current_line!(), &mut commands);
+                    (Mode::Visual(mode), ev) => {
+                        mode.process_event(ev, current_line!(), &mut commands);
+                    }
+                    (Mode::Search(mode), ev) => {
+                        mode.process_event(ev, current_line!(), &mut commands);
                     }
                 }
             }
@@ -351,6 +373,9 @@ impl LineEditor {
                     }
                     Command::ChangeModeToVisualLine => {
                         self.mode = Mode::Visual(VisualMode::new_line());
+                    }
+                    Command::ChangeModeToSearch => {
+                        self.mode = Mode::Search(SearchMode::new());
                     }
 
                     Command::HistoryPrev => {
@@ -373,6 +398,56 @@ impl LineEditor {
                         if self.row < 0 {
                             self.row += 1;
                             current_line!().cursor_end_of_line();
+                        }
+                    }
+
+                    Command::HistorySearch { query, reset } => {
+                        if reset {
+                            self.history_search_start_idx = self.line_history.len() - 1;
+                        }
+
+                        let mut matched = false;
+                        let idx = self.history_search_start_idx;
+
+                        for (i, h) in self.line_history[0..idx].iter().enumerate().rev() {
+                            let line = h.to_string();
+                            if let Some(pos) = line.find(&query) {
+                                self.row = 0;
+                                *current_line!() = h.clone();
+                                matched = true;
+                                self.history_search_start_idx = i;
+
+                                let pre = line[..pos].chars().count();
+                                let len = query.chars().count();
+                                current_line!().cursor_exact(pre + len);
+
+                                break;
+                            }
+                        }
+
+                        if !matched {
+                            for (i, h) in self.line_history[idx..].iter().enumerate().rev() {
+                                let line = h.to_string();
+                                if let Some(pos) = line.find(&query) {
+                                    self.row = 0;
+                                    *current_line!() = h.clone();
+                                    matched = true;
+                                    self.history_search_start_idx = i;
+
+                                    let pre = line[..pos].chars().count();
+                                    let len = query.chars().count();
+                                    current_line!().cursor_exact(pre + len);
+
+                                    break;
+                                }
+                            }
+                        }
+
+                        if !matched {
+                            let mut line = Line::from(query.as_str());
+                            line.cursor_end_of_line();
+                            self.row = 0;
+                            *current_line!() = line;
                         }
                     }
 
@@ -545,14 +620,16 @@ impl LineEditor {
 
         let line = self.commit();
         let result = line.to_string();
-        self.line_history.push(line);
+        if !result.is_empty() {
+            self.line_history.push(line);
+        }
 
         Ok(result)
     }
 
     fn new_line(&mut self) {
         let new_mode = match self.mode {
-            Mode::Insert(..) => Mode::Insert(InsertMode::default()),
+            Mode::Insert(..) | Mode::Search(..) => Mode::Insert(InsertMode::default()),
             Mode::Normal(..) | Mode::Visual(..) => Mode::Normal(NormalMode::default()),
         };
         self.mode = new_mode;
