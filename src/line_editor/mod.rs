@@ -436,22 +436,18 @@ impl LineEditor {
                     }
 
                     Command::MakeCheckPoint => {
-                        let line = current_line!().clone();
-                        self.undo_stack.push(line);
+                        self.undo_stack.push(current_line!().clone());
                         self.redo_stack.clear();
                     }
                     Command::Undo => {
-                        if self.undo_stack.len() >= 2 {
-                            let line = self.undo_stack.pop().unwrap();
-                            self.redo_stack.push(line);
-
-                            let line = self.undo_stack.last().unwrap();
-                            *current_line!() = line.clone();
+                        if let Some(line) = self.undo_stack.pop() {
+                            self.redo_stack.push(current_line!().clone());
+                            *current_line!() = line;
                         }
                     }
                     Command::Redo => {
                         if let Some(line) = self.redo_stack.pop() {
-                            self.undo_stack.push(line.clone());
+                            self.undo_stack.push(current_line!().clone());
                             *current_line!() = line;
                         }
                     }
@@ -543,8 +539,11 @@ impl LineEditor {
         self.row = 0;
 
         self.undo_stack.clear();
-        self.undo_stack.push(line);
         self.redo_stack.clear();
+
+        if self.mode.is_insert() {
+            self.undo_stack.push(line);
+        }
     }
 
     fn commit(&mut self) -> Line {

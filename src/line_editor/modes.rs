@@ -28,6 +28,7 @@ impl EditorMode for NormalMode {
         match self.combo.as_str() {
             "" => match event {
                 Event::Char('i') => {
+                    cmds.push(Command::MakeCheckPoint);
                     cmds.push(Command::ChangeModeToInsert);
                 }
 
@@ -79,19 +80,24 @@ impl EditorMode for NormalMode {
                 }
 
                 Event::Char('A') => {
+                    cmds.push(Command::MakeCheckPoint);
                     cmds.push(Command::ChangeModeToInsert);
                     cmds.push(Command::CursorEnd);
                 }
                 Event::Char('I') => {
+                    cmds.push(Command::MakeCheckPoint);
                     cmds.push(Command::ChangeModeToInsert);
                     cmds.push(Command::CursorBegin);
                 }
 
                 Event::Char('a') => {
+                    cmds.push(Command::MakeCheckPoint);
                     cmds.push(Command::ChangeModeToInsert);
                     cmds.push(Command::CursorNextChar);
                 }
                 Event::Char('s') => {
+                    cmds.push(Command::MakeCheckPoint);
+
                     let ch = line.char_at(line.cursor()).unwrap();
                     cmds.push(Command::RegisterStore {
                         reg: '"',
@@ -100,9 +106,10 @@ impl EditorMode for NormalMode {
 
                     cmds.push(Command::ChangeModeToInsert);
                     cmds.push(Command::DeleteNextChar);
-                    cmds.push(Command::MakeCheckPoint);
                 }
                 Event::Char('x') => {
+                    cmds.push(Command::MakeCheckPoint);
+
                     let ch = line.char_at(line.cursor()).unwrap();
                     cmds.push(Command::RegisterStore {
                         reg: '"',
@@ -110,7 +117,6 @@ impl EditorMode for NormalMode {
                     });
 
                     cmds.push(Command::DeleteNextChar);
-                    cmds.push(Command::MakeCheckPoint);
                 }
 
                 Event::Char('d') => {
@@ -121,6 +127,8 @@ impl EditorMode for NormalMode {
                 }
 
                 Event::Char('D') => {
+                    cmds.push(Command::MakeCheckPoint);
+
                     let from = line.cursor();
                     let to = line.len();
                     let cursor_to_end: String = line.iter(from..to).map(|(c, _)| c).collect();
@@ -129,9 +137,10 @@ impl EditorMode for NormalMode {
                         text: cursor_to_end,
                     });
                     cmds.push(Command::DeleteRange { from, to });
-                    cmds.push(Command::MakeCheckPoint);
                 }
                 Event::Char('C') => {
+                    cmds.push(Command::MakeCheckPoint);
+
                     let from = line.cursor();
                     let to = line.len();
                     let cursor_to_end: String = line.iter(from..to).map(|(c, _)| c).collect();
@@ -142,12 +151,11 @@ impl EditorMode for NormalMode {
 
                     cmds.push(Command::ChangeModeToInsert);
                     cmds.push(Command::DeleteRange { from, to });
-                    cmds.push(Command::MakeCheckPoint);
                 }
                 Event::Char('S') => {
+                    cmds.push(Command::MakeCheckPoint);
                     cmds.push(Command::DeleteLine);
                     cmds.push(Command::ChangeModeToInsert);
-                    cmds.push(Command::MakeCheckPoint);
                 }
 
                 Event::Char('y') => {
@@ -161,12 +169,12 @@ impl EditorMode for NormalMode {
                 }
 
                 Event::Char('P') => {
-                    cmds.push(Command::RegisterPastePrev { reg: '"' });
                     cmds.push(Command::MakeCheckPoint);
+                    cmds.push(Command::RegisterPastePrev { reg: '"' });
                 }
                 Event::Char('p') => {
-                    cmds.push(Command::RegisterPasteNext { reg: '"' });
                     cmds.push(Command::MakeCheckPoint);
+                    cmds.push(Command::RegisterPasteNext { reg: '"' });
                 }
 
                 Event::Char('u') => {
@@ -181,27 +189,25 @@ impl EditorMode for NormalMode {
 
             "d" => {
                 if let Event::Char('d') = event {
+                    cmds.push(Command::MakeCheckPoint);
                     cmds.push(Command::RegisterStore {
                         reg: '"',
                         text: line.to_string(),
                     });
-
                     cmds.push(Command::DeleteLine);
-                    cmds.push(Command::MakeCheckPoint);
                 }
                 self.combo.clear();
             }
 
             "c" => {
                 if let Event::Char('c') = event {
+                    cmds.push(Command::MakeCheckPoint);
                     cmds.push(Command::RegisterStore {
                         reg: '"',
                         text: line.to_string(),
                     });
-
                     cmds.push(Command::DeleteLine);
                     cmds.push(Command::ChangeModeToInsert);
-                    cmds.push(Command::MakeCheckPoint);
                 }
                 self.combo.clear();
             }
@@ -249,7 +255,6 @@ impl EditorMode for InsertMode {
             Event::KeyEscape => {
                 cmds.push(Command::CursorPrevChar);
                 cmds.push(Command::ChangeModeToNormal);
-                cmds.push(Command::MakeCheckPoint);
             }
 
             Event::KeyReturn => cmds.push(Command::Commit),
@@ -336,24 +341,22 @@ impl EditorMode for VisualMode {
             }
 
             Event::Char('D') => {
+                cmds.push(Command::MakeCheckPoint);
                 cmds.push(Command::RegisterStore {
                     reg: '"',
                     text: line.to_string(),
                 });
-
                 cmds.push(Command::DeleteLine);
                 cmds.push(Command::ChangeModeToNormal);
-                cmds.push(Command::MakeCheckPoint);
             }
             Event::Char('C') | Event::Char('S') => {
+                cmds.push(Command::MakeCheckPoint);
                 cmds.push(Command::RegisterStore {
                     reg: '"',
                     text: line.to_string(),
                 });
-
                 cmds.push(Command::ChangeModeToInsert);
                 cmds.push(Command::DeleteLine);
-                cmds.push(Command::MakeCheckPoint);
             }
             Event::Char('Y') => {
                 cmds.push(Command::RegisterStore {
@@ -364,6 +367,8 @@ impl EditorMode for VisualMode {
             }
 
             Event::Char('d') | Event::Char('x') => {
+                cmds.push(Command::MakeCheckPoint);
+
                 if self.is_line_mode() {
                     cmds.push(Command::RegisterStore {
                         reg: '"',
@@ -388,9 +393,10 @@ impl EditorMode for VisualMode {
                     cmds.push(Command::DeleteRange { from, to });
                 }
                 cmds.push(Command::ChangeModeToNormal);
-                cmds.push(Command::MakeCheckPoint);
             }
             Event::Char('c') | Event::Char('s') => {
+                cmds.push(Command::MakeCheckPoint);
+
                 cmds.push(Command::ChangeModeToInsert);
                 if self.is_line_mode() {
                     cmds.push(Command::RegisterStore {
@@ -415,7 +421,6 @@ impl EditorMode for VisualMode {
 
                     cmds.push(Command::DeleteRange { from, to });
                 }
-                cmds.push(Command::MakeCheckPoint);
             }
             Event::Char('y') => {
                 if self.is_line_mode() {
