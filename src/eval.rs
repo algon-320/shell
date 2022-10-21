@@ -716,11 +716,15 @@ impl Env {
     }
 }
 
-fn builtin_exit(shell: &mut Shell, _args: &[CString], _io: Io) -> i32 {
+fn builtin_exit(shell: &mut Shell, _args: &[CString], mut io: Io) -> i32 {
     if shell.jobs.is_empty() {
         std::process::exit(0);
     } else {
-        eprintln!("you have {} pending jobs", shell.jobs.len()); // FIXME: write on `io.error`
+        let _ = writeln!(
+            &mut io.error,
+            "exit: you have {} pending jobs.",
+            shell.jobs.len()
+        );
         1
     }
 }
