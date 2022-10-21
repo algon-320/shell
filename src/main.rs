@@ -61,6 +61,7 @@ fn main() {
             }
             Err(EditError::Exitted) => {
                 if shell.jobs() == 0 {
+                    println!("exit");
                     break;
                 } else {
                     println!();
