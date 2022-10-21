@@ -98,11 +98,12 @@ impl EditorMode for NormalMode {
                 Event::Char('s') => {
                     cmds.push(Command::MakeCheckPoint);
 
-                    let ch = line.char_at(line.cursor()).unwrap();
-                    cmds.push(Command::RegisterStore {
-                        reg: '"',
-                        text: ch.to_string(),
-                    });
+                    if let Some(ch) = line.char_at(line.cursor()) {
+                        cmds.push(Command::RegisterStore {
+                            reg: '"',
+                            text: ch.to_string(),
+                        });
+                    }
 
                     cmds.push(Command::ChangeModeToInsert);
                     cmds.push(Command::DeleteNextChar);
@@ -110,11 +111,12 @@ impl EditorMode for NormalMode {
                 Event::Char('x') => {
                     cmds.push(Command::MakeCheckPoint);
 
-                    let ch = line.char_at(line.cursor()).unwrap();
-                    cmds.push(Command::RegisterStore {
-                        reg: '"',
-                        text: ch.to_string(),
-                    });
+                    if let Some(ch) = line.char_at(line.cursor()) {
+                        cmds.push(Command::RegisterStore {
+                            reg: '"',
+                            text: ch.to_string(),
+                        });
+                    }
 
                     cmds.push(Command::DeleteNextChar);
                 }
