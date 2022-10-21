@@ -531,7 +531,11 @@ impl LineEditor {
     }
 
     fn new_line(&mut self) {
-        self.mode = Mode::Insert(InsertMode::default());
+        let new_mode = match self.mode {
+            Mode::Insert(..) => Mode::Insert(InsertMode::default()),
+            Mode::Normal(..) | Mode::Visual(..) => Mode::Normal(NormalMode::default()),
+        };
+        self.mode = new_mode;
 
         let line = Line::new();
         self.temporal.clear();
