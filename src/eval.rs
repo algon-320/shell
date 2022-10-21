@@ -745,6 +745,7 @@ fn builtin_jobs(shell: &mut Shell, _args: &[CString], mut io: Io) -> i32 {
 
 fn builtin_fg(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
     let job_pgid = if let Some(arg) = args.get(1) {
+        // CStr --> str --> i32 --> Pgid (Pid)
         let valid_pgid = std::str::from_utf8(arg.as_bytes())
             .ok()
             .and_then(|s| s.parse::<i32>().ok())
