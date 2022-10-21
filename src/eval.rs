@@ -405,7 +405,7 @@ impl Shell {
         for part in parts {
             match part {
                 StrPart::Chars(chars) => {
-                    buf.extend_from_slice(chars.as_bytes());
+                    buf.extend(self.expand_tilde(chars.as_bytes()));
                 }
 
                 StrPart::Expansion(expansion) => match expansion {
@@ -488,7 +488,22 @@ impl Shell {
                 },
             }
         }
+
         buf
+    }
+
+    fn expand_tilde(&self, bytes: &[u8]) -> Vec<u8> {
+        // FIXME: this is too naive
+        if bytes.first() == Some(&b'~') {
+            let home = self.env.get_env("HOME").unwrap_or_else(|| todo!());
+
+            let mut expanded = Vec::new();
+            expanded.extend_from_slice(home.as_bytes());
+            expanded.extend_from_slice(&bytes[1..]);
+            expanded
+        } else {
+            bytes.to_vec()
+        }
     }
 
     fn do_fork_exec(&mut self, exe_path: &Path, args: &[CString], job: &mut Job, io: Io) {
