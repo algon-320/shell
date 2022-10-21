@@ -525,11 +525,12 @@ impl LineEditor {
             }
         }
 
-        print!("\x1b[J");
+        print!("\r\n\x1b[J");
 
         let line = self.commit();
         let result = line.to_string();
         self.line_history.push(line);
+
         Ok(result)
     }
 

@@ -37,10 +37,7 @@ fn main() {
 
         use line_editor::EditError;
         let line = match line_editor.read_line(prompt_prefix) {
-            Ok(line) => {
-                println!();
-                line
-            }
+            Ok(line) => line,
             Err(EditError::Aborted) => {
                 println!();
                 continue;
