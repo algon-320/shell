@@ -1,10 +1,33 @@
-fn char_class(ch: char) -> i32 {
-    if ch.is_whitespace() {
-        0
-    } else if ch.is_alphanumeric() || ch == '_' {
-        1
-    } else {
-        2
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CharClass {
+    WhiteSpace,
+    Keyword,
+    Other,
+}
+
+impl CharClass {
+    pub fn is_whitespace(&self) -> bool {
+        *self == CharClass::WhiteSpace
+    }
+
+    pub fn is_same(rough: bool, a: Self, b: Self) -> bool {
+        if rough {
+            (a.is_whitespace() && b.is_whitespace()) || (!a.is_whitespace() && !b.is_whitespace())
+        } else {
+            a == b
+        }
+    }
+}
+
+impl From<char> for CharClass {
+    fn from(ch: char) -> Self {
+        if ch.is_whitespace() {
+            CharClass::WhiteSpace
+        } else if ch.is_alphanumeric() || ch == '_' {
+            CharClass::Keyword
+        } else {
+            CharClass::Other
+        }
     }
 }
 
@@ -51,15 +74,15 @@ impl Line {
     }
 
     pub fn last_word(&self, wide: bool) -> Option<String> {
-        let word_class = char_class(self.buf.last()?.0);
-        if word_class == 0 {
+        let word_class = CharClass::from(self.buf.last()?.0);
+        if word_class == CharClass::WhiteSpace {
             return None;
         }
 
         let mut i = self.buf.len() - 1;
         while i > 0 {
-            let class = char_class(self.buf[i - 1].0);
-            if (wide && class == 0) || (!wide && class != word_class) {
+            let prev_class = CharClass::from(self.buf[i - 1].0);
+            if !CharClass::is_same(wide, prev_class, word_class) {
                 break;
             }
             i -= 1;
@@ -92,7 +115,8 @@ impl Line {
     pub fn delete_word(&mut self) {
         // remove trailing whitespaces
         while self.cursor > 0 {
-            if char_class(self.buf[self.cursor - 1].0) != 0 {
+            let prev_class = CharClass::from(self.buf[self.cursor - 1].0);
+            if !prev_class.is_whitespace() {
                 break;
             }
             self.delete_prev();
@@ -103,9 +127,10 @@ impl Line {
         }
 
         // remove a single word
-        let word_class = char_class(self.buf[self.cursor - 1].0);
+        let word_class = CharClass::from(self.buf[self.cursor - 1].0);
         while self.cursor > 0 {
-            if char_class(self.buf[self.cursor - 1].0) != word_class {
+            let prev_class = CharClass::from(self.buf[self.cursor - 1].0);
+            if !CharClass::is_same(false, prev_class, word_class) {
                 break;
             }
             self.delete_prev();
@@ -170,7 +195,8 @@ impl Line {
 
     pub fn cursor_prev_word_head(&mut self, wide: bool) {
         while self.cursor > 0 {
-            if char_class(self.buf[self.cursor - 1].0) != 0 {
+            let prev_class = CharClass::from(self.buf[self.cursor - 1].0);
+            if !prev_class.is_whitespace() {
                 break;
             }
             self.cursor -= 1;
@@ -180,10 +206,10 @@ impl Line {
             return;
         }
 
-        let word_class = char_class(self.buf[self.cursor - 1].0);
+        let word_class = CharClass::from(self.buf[self.cursor - 1].0);
         while self.cursor > 0 {
-            let ch = self.buf[self.cursor - 1].0;
-            if (wide && char_class(ch) == 0) || (!wide && char_class(ch) != word_class) {
+            let prev_class = CharClass::from(self.buf[self.cursor - 1].0);
+            if !CharClass::is_same(wide, prev_class, word_class) {
                 break;
             }
             self.cursor -= 1;
@@ -197,17 +223,17 @@ impl Line {
             return;
         }
 
-        let word_class = char_class(self.buf[self.cursor].0);
+        let word_class = CharClass::from(self.buf[self.cursor].0);
         while self.cursor + 1 < len {
-            let ch = self.buf[self.cursor].0;
-            if (wide && char_class(ch) == 0) || (!wide && char_class(ch) != word_class) {
+            let class = CharClass::from(self.buf[self.cursor].0);
+            if !CharClass::is_same(wide, class, word_class) {
                 break;
             }
             self.cursor += 1;
         }
 
         while self.cursor + 1 < len {
-            if char_class(self.buf[self.cursor].0) != 0 {
+            if !CharClass::from(self.buf[self.cursor].0).is_whitespace() {
                 break;
             }
             self.cursor += 1;
@@ -220,7 +246,7 @@ impl Line {
         let len = self.buf.len();
 
         while self.cursor + 1 < len {
-            if char_class(self.buf[self.cursor].0) != 0 {
+            if !CharClass::from(self.buf[self.cursor].0).is_whitespace() {
                 break;
             }
             self.cursor += 1;
@@ -230,13 +256,10 @@ impl Line {
             return;
         }
 
-        let word_class = char_class(self.buf[self.cursor].0);
-
+        let word_class = CharClass::from(self.buf[self.cursor].0);
         while self.cursor + 1 < len {
-            let next_char = self.buf[self.cursor + 1].0;
-            if (wide && char_class(next_char) == 0)
-                || (!wide && char_class(next_char) != word_class)
-            {
+            let next_class = CharClass::from(self.buf[self.cursor + 1].0);
+            if !CharClass::is_same(wide, next_class, word_class) {
                 break;
             }
             self.cursor += 1;

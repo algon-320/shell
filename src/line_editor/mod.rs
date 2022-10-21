@@ -1,6 +1,7 @@
 mod completion;
 mod line;
 mod modes;
+mod text_object;
 
 use nix::libc::STDIN_FILENO;
 use nix::sys::termios;
@@ -12,7 +13,7 @@ use crate::terminal_size;
 use line::*;
 use modes::*;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Event {
     KeyEscape,
     KeyTab,

@@ -17,16 +17,119 @@ pub(super) trait EditorMode {
     fn process_event(&mut self, event: Event, _line: &Line, cmds: &mut Vec<Command>);
 }
 
+fn parse_vim_text_object(
+    sel: char,
+    obj: char,
+) -> Option<(text_object::Selector, text_object::TextObject)> {
+    use text_object::{Selector, TextObject};
+
+    let sel = match sel {
+        'i' => Selector::Inside,
+        'a' => Selector::An,
+        _ => return None,
+    };
+
+    let obj = match obj {
+        'w' => TextObject::Word { wide: false },
+        'W' => TextObject::Word { wide: true },
+        '(' | ')' => TextObject::Pair {
+            begin: '(',
+            end: ')',
+        },
+        '[' | ']' => TextObject::Pair {
+            begin: '[',
+            end: ']',
+        },
+        '<' | '>' => TextObject::Pair {
+            begin: '<',
+            end: '>',
+        },
+        '{' | '}' => TextObject::Pair {
+            begin: '{',
+            end: '}',
+        },
+        '\'' => TextObject::Pair {
+            begin: '\'',
+            end: '\'',
+        },
+        '"' => TextObject::Pair {
+            begin: '"',
+            end: '"',
+        },
+        '`' => TextObject::Pair {
+            begin: '`',
+            end: '`',
+        },
+        _ => return None,
+    };
+
+    Some((sel, obj))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(super) struct NormalMode {
-    combo: String,
+    combo: Vec<char>,
     last_find: Option<(char, char)>,
+}
+
+impl NormalMode {
+    fn process_text_object(&mut self, event: Event, line: &Line, cmds: &mut Vec<Command>) {
+        if self.combo.len() < 3 {
+            match event {
+                Event::Char(ch) => {
+                    self.combo.push(ch);
+                    if self.combo.len() < 3 {
+                        return;
+                    }
+                }
+                _ => {
+                    self.combo.clear();
+                    return;
+                }
+            }
+        }
+
+        if let Some((sel, obj)) = parse_vim_text_object(self.combo[1], self.combo[2]) {
+            let (from, to) = text_object::find_range(line, sel, obj);
+            let selected: String = line.iter(from..to).map(|(c, _)| c).collect();
+
+            match self.combo[0] {
+                'd' => {
+                    cmds.push(Command::MakeCheckPoint);
+                    cmds.push(Command::RegisterStore {
+                        reg: '"',
+                        text: selected,
+                    });
+                    cmds.push(Command::DeleteRange { from, to });
+                }
+                'c' => {
+                    cmds.push(Command::MakeCheckPoint);
+                    cmds.push(Command::RegisterStore {
+                        reg: '"',
+                        text: selected,
+                    });
+                    cmds.push(Command::DeleteRange { from, to });
+                    cmds.push(Command::ChangeModeToInsert);
+                }
+                'y' => {
+                    cmds.push(Command::RegisterStore {
+                        reg: '"',
+                        text: selected,
+                    });
+                    cmds.push(Command::CursorExact(from));
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        self.combo.clear();
+    }
 }
 
 impl EditorMode for NormalMode {
     fn process_event(&mut self, event: Event, line: &Line, cmds: &mut Vec<Command>) {
-        match self.combo.as_str() {
-            "" => match event {
+        match self.combo.first() {
+            None => match event {
                 Event::Char('i') => {
                     cmds.push(Command::MakeCheckPoint);
                     cmds.push(Command::ChangeModeToInsert);
@@ -192,20 +295,22 @@ impl EditorMode for NormalMode {
                 _ => {}
             },
 
-            "d" => {
-                if let Event::Char('d') = event {
+            Some('d') => {
+                if self.combo.len() == 1 && event == Event::Char('d') {
                     cmds.push(Command::MakeCheckPoint);
                     cmds.push(Command::RegisterStore {
                         reg: '"',
                         text: line.to_string(),
                     });
                     cmds.push(Command::DeleteLine);
+                    self.combo.clear();
+                } else {
+                    self.process_text_object(event, line, cmds);
                 }
-                self.combo.clear();
             }
 
-            "c" => {
-                if let Event::Char('c') = event {
+            Some('c') => {
+                if self.combo.len() == 1 && event == Event::Char('c') {
                     cmds.push(Command::MakeCheckPoint);
                     cmds.push(Command::RegisterStore {
                         reg: '"',
@@ -213,21 +318,25 @@ impl EditorMode for NormalMode {
                     });
                     cmds.push(Command::DeleteLine);
                     cmds.push(Command::ChangeModeToInsert);
+                    self.combo.clear();
+                } else {
+                    self.process_text_object(event, line, cmds);
                 }
-                self.combo.clear();
             }
 
-            "y" => {
-                if let Event::Char('y') = event {
+            Some('y') => {
+                if self.combo.len() == 1 && event == Event::Char('y') {
                     cmds.push(Command::RegisterStore {
                         reg: '"',
                         text: line.to_string(),
                     });
+                    self.combo.clear();
+                } else {
+                    self.process_text_object(event, line, cmds);
                 }
-                self.combo.clear();
             }
 
-            "f" => {
+            Some('f') => {
                 if let Event::Char(ch) = event {
                     self.last_find = Some(('f', ch));
                     cmds.push(Command::CursorNextCharMatch(ch));
@@ -236,7 +345,7 @@ impl EditorMode for NormalMode {
                 }
                 self.combo.clear();
             }
-            "F" => {
+            Some('F') => {
                 if let Event::Char(ch) = event {
                     self.last_find = Some(('F', ch));
                     cmds.push(Command::CursorPrevCharMatch(ch));
@@ -287,17 +396,22 @@ impl EditorMode for InsertMode {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(super) struct VisualMode {
     origin: isize,
+    combo: Vec<char>,
 }
 
 impl VisualMode {
     pub fn new_char(origin: usize) -> Self {
         Self {
             origin: origin as isize,
+            combo: Vec::new(),
         }
     }
 
     pub fn new_line() -> Self {
-        Self { origin: isize::MIN }
+        Self {
+            origin: isize::MIN,
+            combo: Vec::new(),
+        }
     }
 
     pub fn origin(&self) -> Option<usize> {
@@ -311,150 +425,188 @@ impl VisualMode {
     fn is_line_mode(&self) -> bool {
         self.origin == isize::MIN
     }
+
+    fn process_text_object(&mut self, event: Event, line: &Line, cmds: &mut Vec<Command>) {
+        if self.combo.len() < 2 {
+            match event {
+                Event::Char(ch) => {
+                    self.combo.push(ch);
+                    if self.combo.len() < 2 {
+                        return;
+                    }
+                }
+                _ => {
+                    self.combo.clear();
+                    return;
+                }
+            }
+        }
+
+        if let Some((sel, obj)) = parse_vim_text_object(self.combo[0], self.combo[1]) {
+            let (from, to) = text_object::find_range(line, sel, obj);
+            if to > from {
+                self.origin = from as isize;
+                cmds.push(Command::CursorExact(to - 1));
+            }
+        }
+
+        self.combo.clear();
+    }
 }
 
 impl EditorMode for VisualMode {
     fn process_event(&mut self, event: Event, line: &Line, cmds: &mut Vec<Command>) {
-        match event {
-            Event::KeyEscape | Event::Char('v') => {
-                cmds.push(Command::ChangeModeToNormal);
-            }
-
-            Event::KeyReturn => cmds.push(Command::Commit),
-            Event::KeyLeft | Event::Char('h') => cmds.push(Command::CursorPrevChar),
-            Event::KeyRight | Event::Char('l') => cmds.push(Command::CursorNextChar),
-            Event::Char('w') => cmds.push(Command::CursorNextWordHead),
-            Event::Char('W') => cmds.push(Command::CursorNextWordHeadWide),
-            Event::Char('e') => cmds.push(Command::CursorNextWordEnd),
-            Event::Char('E') => cmds.push(Command::CursorNextWordEndWide),
-            Event::Char('b') => cmds.push(Command::CursorPrevWordHead),
-            Event::Char('B') => cmds.push(Command::CursorPrevWordHeadWide),
-
-            Event::Char('o') => {
-                if !self.is_line_mode() {
-                    cmds.push(Command::CursorExact(self.origin as usize));
-                    self.origin = line.cursor() as isize;
-                }
-            }
-
-            Event::Char('$') => {
-                cmds.push(Command::CursorEnd);
-            }
-            Event::Char('^') => {
-                cmds.push(Command::CursorBegin);
-            }
-            Event::Char('0') => {
-                cmds.push(Command::CursorExact(0));
-            }
-
-            Event::Char('D') => {
-                cmds.push(Command::MakeCheckPoint);
-                cmds.push(Command::RegisterStore {
-                    reg: '"',
-                    text: line.to_string(),
-                });
-                cmds.push(Command::DeleteLine);
-                cmds.push(Command::ChangeModeToNormal);
-            }
-            Event::Char('C') | Event::Char('S') => {
-                cmds.push(Command::MakeCheckPoint);
-                cmds.push(Command::RegisterStore {
-                    reg: '"',
-                    text: line.to_string(),
-                });
-                cmds.push(Command::ChangeModeToInsert);
-                cmds.push(Command::DeleteLine);
-            }
-            Event::Char('Y') => {
-                cmds.push(Command::RegisterStore {
-                    reg: '"',
-                    text: line.to_string(),
-                });
-                cmds.push(Command::ChangeModeToNormal);
-            }
-
-            Event::Char('d') | Event::Char('x') => {
-                cmds.push(Command::MakeCheckPoint);
-
-                if self.is_line_mode() {
-                    cmds.push(Command::RegisterStore {
-                        reg: '"',
-                        text: line.to_string(),
-                    });
-
-                    cmds.push(Command::DeleteLine);
-                } else {
-                    let mut from = self.origin as usize;
-                    let mut to = line.cursor();
-                    if from > to {
-                        std::mem::swap(&mut from, &mut to);
+        match self.combo.first() {
+            None => {
+                match event {
+                    Event::KeyEscape | Event::Char('v') => {
+                        cmds.push(Command::ChangeModeToNormal);
                     }
-                    to += 1; // make it half-opened
 
-                    let part: String = line.iter(from..to).map(|(ch, _)| ch).collect();
-                    cmds.push(Command::RegisterStore {
-                        reg: '"',
-                        text: part,
-                    });
-
-                    cmds.push(Command::DeleteRange { from, to });
-                }
-                cmds.push(Command::ChangeModeToNormal);
-            }
-            Event::Char('c') | Event::Char('s') => {
-                cmds.push(Command::MakeCheckPoint);
-
-                cmds.push(Command::ChangeModeToInsert);
-                if self.is_line_mode() {
-                    cmds.push(Command::RegisterStore {
-                        reg: '"',
-                        text: line.to_string(),
-                    });
-
-                    cmds.push(Command::DeleteLine);
-                } else {
-                    let mut from = self.origin as usize;
-                    let mut to = line.cursor();
-                    if from > to {
-                        std::mem::swap(&mut from, &mut to);
+                    Event::Char(sel @ ('i' | 'a')) => {
+                        self.combo.push(sel);
                     }
-                    to += 1; // make it half-opened
 
-                    let part: String = line.iter(from..to).map(|(ch, _)| ch).collect();
-                    cmds.push(Command::RegisterStore {
-                        reg: '"',
-                        text: part,
-                    });
+                    Event::KeyReturn => cmds.push(Command::Commit),
+                    Event::KeyLeft | Event::Char('h') => cmds.push(Command::CursorPrevChar),
+                    Event::KeyRight | Event::Char('l') => cmds.push(Command::CursorNextChar),
+                    Event::Char('w') => cmds.push(Command::CursorNextWordHead),
+                    Event::Char('W') => cmds.push(Command::CursorNextWordHeadWide),
+                    Event::Char('e') => cmds.push(Command::CursorNextWordEnd),
+                    Event::Char('E') => cmds.push(Command::CursorNextWordEndWide),
+                    Event::Char('b') => cmds.push(Command::CursorPrevWordHead),
+                    Event::Char('B') => cmds.push(Command::CursorPrevWordHeadWide),
 
-                    cmds.push(Command::DeleteRange { from, to });
-                }
-            }
-            Event::Char('y') => {
-                if self.is_line_mode() {
-                    cmds.push(Command::RegisterStore {
-                        reg: '"',
-                        text: line.to_string(),
-                    });
-
-                    cmds.push(Command::DeleteLine);
-                } else {
-                    let mut from = self.origin as usize;
-                    let mut to = line.cursor();
-                    if from > to {
-                        std::mem::swap(&mut from, &mut to);
+                    Event::Char('o') => {
+                        if !self.is_line_mode() {
+                            cmds.push(Command::CursorExact(self.origin as usize));
+                            self.origin = line.cursor() as isize;
+                        }
                     }
-                    to += 1; // make it half-opened
 
-                    let part: String = line.iter(from..to).map(|(ch, _)| ch).collect();
-                    cmds.push(Command::RegisterStore {
-                        reg: '"',
-                        text: part,
-                    });
+                    Event::Char('$') => {
+                        cmds.push(Command::CursorEnd);
+                    }
+                    Event::Char('^') => {
+                        cmds.push(Command::CursorBegin);
+                    }
+                    Event::Char('0') => {
+                        cmds.push(Command::CursorExact(0));
+                    }
+
+                    Event::Char('D') => {
+                        cmds.push(Command::MakeCheckPoint);
+                        cmds.push(Command::RegisterStore {
+                            reg: '"',
+                            text: line.to_string(),
+                        });
+                        cmds.push(Command::DeleteLine);
+                        cmds.push(Command::ChangeModeToNormal);
+                    }
+                    Event::Char('C') | Event::Char('S') => {
+                        cmds.push(Command::MakeCheckPoint);
+                        cmds.push(Command::RegisterStore {
+                            reg: '"',
+                            text: line.to_string(),
+                        });
+                        cmds.push(Command::ChangeModeToInsert);
+                        cmds.push(Command::DeleteLine);
+                    }
+                    Event::Char('Y') => {
+                        cmds.push(Command::RegisterStore {
+                            reg: '"',
+                            text: line.to_string(),
+                        });
+                        cmds.push(Command::ChangeModeToNormal);
+                    }
+
+                    Event::Char('d') | Event::Char('x') => {
+                        cmds.push(Command::MakeCheckPoint);
+
+                        if self.is_line_mode() {
+                            cmds.push(Command::RegisterStore {
+                                reg: '"',
+                                text: line.to_string(),
+                            });
+
+                            cmds.push(Command::DeleteLine);
+                        } else {
+                            let mut from = self.origin as usize;
+                            let mut to = line.cursor();
+                            if from > to {
+                                std::mem::swap(&mut from, &mut to);
+                            }
+                            to += 1; // make it half-opened
+
+                            let part: String = line.iter(from..to).map(|(ch, _)| ch).collect();
+                            cmds.push(Command::RegisterStore {
+                                reg: '"',
+                                text: part,
+                            });
+
+                            cmds.push(Command::DeleteRange { from, to });
+                        }
+                        cmds.push(Command::ChangeModeToNormal);
+                    }
+                    Event::Char('c') | Event::Char('s') => {
+                        cmds.push(Command::MakeCheckPoint);
+
+                        cmds.push(Command::ChangeModeToInsert);
+                        if self.is_line_mode() {
+                            cmds.push(Command::RegisterStore {
+                                reg: '"',
+                                text: line.to_string(),
+                            });
+
+                            cmds.push(Command::DeleteLine);
+                        } else {
+                            let mut from = self.origin as usize;
+                            let mut to = line.cursor();
+                            if from > to {
+                                std::mem::swap(&mut from, &mut to);
+                            }
+                            to += 1; // make it half-opened
+
+                            let part: String = line.iter(from..to).map(|(ch, _)| ch).collect();
+                            cmds.push(Command::RegisterStore {
+                                reg: '"',
+                                text: part,
+                            });
+
+                            cmds.push(Command::DeleteRange { from, to });
+                        }
+                    }
+                    Event::Char('y') => {
+                        if self.is_line_mode() {
+                            cmds.push(Command::RegisterStore {
+                                reg: '"',
+                                text: line.to_string(),
+                            });
+
+                            cmds.push(Command::DeleteLine);
+                        } else {
+                            let mut from = self.origin as usize;
+                            let mut to = line.cursor();
+                            if from > to {
+                                std::mem::swap(&mut from, &mut to);
+                            }
+                            to += 1; // make it half-opened
+
+                            let part: String = line.iter(from..to).map(|(ch, _)| ch).collect();
+                            cmds.push(Command::RegisterStore {
+                                reg: '"',
+                                text: part,
+                            });
+                        }
+                        cmds.push(Command::ChangeModeToNormal);
+                    }
+
+                    _ => {}
                 }
-                cmds.push(Command::ChangeModeToNormal);
             }
-
-            _ => {}
+            Some(_) => {
+                self.process_text_object(event, line, cmds);
+            }
         }
     }
 }
