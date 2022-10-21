@@ -681,28 +681,6 @@ impl Env {
             let export = Executable::Builtin(BuiltinCommandImpl(builtin_export));
             self.commands.insert("export".into(), export);
         }
-
-        // FIXME: this is just for ease of development
-        {
-            self.aliases.insert(
-                str_r_to_os("j").to_owned(),
-                vec![str_r_to_os("jobs").to_owned()],
-            );
-
-            self.aliases.insert(
-                str_r_to_os("ls").to_owned(),
-                vec![
-                    str_r_to_os("ls").to_owned(),
-                    str_r_to_os("--color=always").to_owned(),
-                    str_r_to_os("-Fv").to_owned(),
-                ],
-            );
-
-            self.aliases.insert(
-                str_r_to_os("cl").to_owned(),
-                vec![str_r_to_os("clear").to_owned()],
-            );
-        }
     }
 
     pub fn get_env<'a>(&self, name: &'a str) -> Option<&'_ OsStr> {
