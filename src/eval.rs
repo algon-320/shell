@@ -3,13 +3,20 @@ use nix::libc::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use nix::sys::{signal, termios, wait};
 use nix::unistd::{self, Pid};
 use std::collections::HashMap;
-use std::ffi::{CString, OsStr, OsString};
+use std::ffi::{CStr, CString, OsStr, OsString};
 use std::io::{Read, Write};
-use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
+use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 
 use crate::ast::*;
 use crate::io::{pipe_pair, Io};
+
+fn str_c_to_os(cstr: &CStr) -> &OsStr {
+    OsStr::from_bytes(cstr.to_bytes())
+}
+fn str_r_to_os(s: &str) -> &OsStr {
+    OsStr::new(s)
+}
 
 type Pgid = Pid;
 
@@ -332,7 +339,7 @@ impl Shell {
                 let mut args: Vec<CString> = args.iter().flat_map(|a| self.eval_args(a)).collect();
                 assert!(!args.is_empty());
 
-                let arg0 = OsStr::from_bytes(args[0].as_bytes());
+                let arg0 = str_c_to_os(&args[0]);
                 if let Some(alias_values) = self.env.aliases.get(arg0) {
                     let mut actual_args: Vec<CString> = alias_values
                         .iter()
@@ -343,7 +350,7 @@ impl Shell {
                 }
 
                 let exe = {
-                    let arg0_os = OsStr::from_bytes(args[0].as_bytes());
+                    let arg0_os = str_c_to_os(&args[0]);
                     self.env.commands.get(arg0_os).cloned().unwrap_or_else(|| {
                         let path = PathBuf::from(arg0_os);
                         Executable::External(path)
@@ -403,7 +410,7 @@ impl Shell {
 
                 StrPart::Expansion(expansion) => match expansion {
                     Expansion::Variable { name } => {
-                        let name = OsStr::new(name);
+                        let name = str_r_to_os(name);
                         if let Some(value) = self.env.shell_vars.get(name) {
                             buf.extend_from_slice(value.as_bytes());
                         } else if let Some(value) = self.env.env_vars.get(name) {
@@ -588,8 +595,8 @@ impl Env {
     pub fn update_commands(&mut self) {
         self.commands.clear();
 
-        let path_value = match self.env_vars.get(OsStr::new("PATH")) {
-            Some(val) => val,
+        let path_value = match self.get_env("PATH") {
+            Some(val) => val.to_owned(),
             None => {
                 return;
             }
@@ -656,21 +663,35 @@ impl Env {
 
         // FIXME: this is just for ease of development
         {
-            self.aliases
-                .insert(OsString::from("j"), vec![OsString::from("jobs")]);
+            self.aliases.insert(
+                str_r_to_os("j").to_owned(),
+                vec![str_r_to_os("jobs").to_owned()],
+            );
 
             self.aliases.insert(
-                OsString::from("ls"),
+                str_r_to_os("ls").to_owned(),
                 vec![
-                    OsString::from("ls"),
-                    OsString::from("--color=always"),
-                    OsString::from("-Fv"),
+                    str_r_to_os("ls").to_owned(),
+                    str_r_to_os("--color=always").to_owned(),
+                    str_r_to_os("-Fv").to_owned(),
                 ],
             );
 
-            self.aliases
-                .insert(OsString::from("cl"), vec![OsString::from("clear")]);
+            self.aliases.insert(
+                str_r_to_os("cl").to_owned(),
+                vec![str_r_to_os("clear").to_owned()],
+            );
         }
+    }
+
+    pub fn get_env<'a>(&self, name: &'a str) -> Option<&'_ OsStr> {
+        self.env_vars
+            .get(str_r_to_os(name))
+            .map(|val| val.as_os_str())
+    }
+
+    pub fn set_env(&mut self, name: &str, value: OsString) {
+        self.env_vars.insert(str_r_to_os(name).to_owned(), value);
     }
 }
 
@@ -684,29 +705,34 @@ fn builtin_exit(shell: &mut Shell, _args: &[CString], _io: Io) -> i32 {
 }
 
 fn builtin_cd(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
-    let home = shell
-        .env
-        .env_vars
-        .get(OsStr::new("HOME"))
-        .map(|s| s.as_os_str())
-        .unwrap_or_else(|| OsStr::new("."));
+    let old_cwd = std::env::current_dir();
 
-    let dir = args
+    let new_cwd = args
         .get(1)
-        .map(|c| OsStr::from_bytes(c.as_bytes()))
-        .unwrap_or(home);
-
-    if let Err(err) = std::env::set_current_dir(Path::new(dir)) {
-        let _ = writeln!(&mut io.error, "cd: {err}");
-        1
-    } else {
-        if let Ok(cwd) = std::env::current_dir() {
-            shell
+        .map(|c| str_c_to_os(c).to_owned())
+        .unwrap_or_else(|| {
+            let home = shell
                 .env
-                .env_vars
-                .insert(OsString::from("PWD"), cwd.into_os_string());
+                .get_env("HOME")
+                .unwrap_or_else(|| str_r_to_os("."));
+            home.to_owned()
+        });
+
+    match std::env::set_current_dir(Path::new(&new_cwd)) {
+        Err(err) => {
+            let _ = writeln!(&mut io.error, "cd: {err}");
+            1
         }
-        0
+
+        Ok(_) => {
+            if let Ok(old_cwd) = old_cwd {
+                shell.env.set_env("OLDPWD", old_cwd.as_os_str().to_owned());
+            }
+
+            shell.env.set_env("PWD", new_cwd.to_owned());
+
+            0
+        }
     }
 }
 
@@ -781,14 +807,10 @@ fn builtin_fg(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
 
 fn builtin_append(_shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
     let outpath = match args.get(1) {
+        Some(arg) => Path::new(str_c_to_os(arg)),
         None => {
             let _ = writeln!(&mut io.error, ">>: takes 1 argument");
             return 1;
-        }
-
-        Some(arg) => {
-            let arg_os = OsStr::from_bytes(arg.as_bytes());
-            Path::new(arg_os)
         }
     };
 
@@ -817,14 +839,10 @@ fn builtin_append(_shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
 
 fn builtin_overwrite(_shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
     let outpath = match args.get(1) {
+        Some(arg) => Path::new(str_c_to_os(arg)),
         None => {
             let _ = writeln!(&mut io.error, ">: takes 1 argument");
             return 1;
-        }
-
-        Some(arg) => {
-            let arg_os = OsStr::from_bytes(arg.as_bytes());
-            Path::new(arg_os)
         }
     };
 
@@ -863,10 +881,10 @@ fn builtin_alias(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
         return 0;
     } else if args[2].as_bytes() == b"=" {
         // % alias foo = bar
-        let name = OsString::from_vec(args[1].as_bytes().to_vec());
+        let name = str_c_to_os(&args[1]).to_owned();
         let values: Vec<OsString> = args[3..]
             .iter()
-            .map(|cs| OsString::from_vec(cs.as_bytes().to_vec()))
+            .map(|c| str_c_to_os(c).to_owned())
             .collect();
         shell.env.aliases.insert(name, values);
         return 0;
@@ -885,8 +903,8 @@ fn builtin_var(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
         }
         return 0;
     } else if args.len() == 4 && args[2].as_bytes() == b"=" {
-        let key = OsString::from_vec(args[1].as_bytes().to_vec());
-        let val = OsString::from_vec(args[3].as_bytes().to_vec());
+        let key = str_c_to_os(&args[1]).to_owned();
+        let val = str_c_to_os(&args[3]).to_owned();
         shell.env.shell_vars.insert(key, val);
         return 0;
     }
@@ -900,7 +918,7 @@ fn builtin_export(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
 
     let mut status = 0;
     for arg in args[1..].iter() {
-        let name = OsStr::from_bytes(arg.as_bytes());
+        let name = str_c_to_os(arg);
         if let Some(value) = shell.env.shell_vars.get(name) {
             shell.env.env_vars.insert(name.to_owned(), value.to_owned());
         } else {
