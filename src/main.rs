@@ -27,13 +27,30 @@ fn main() {
             "".to_owned()
         };
 
+        let cwd = format!(
+            "(\x1b[1;35m){}(\x1b[m)",
+            std::env::current_dir()
+                .ok()
+                .map(|p| {
+                    if let Some(path_after_home) = std::env::var("HOME")
+                        .ok()
+                        .and_then(|home| p.strip_prefix(home).ok())
+                    {
+                        format!("~/{}", path_after_home.display())
+                    } else {
+                        p.display().to_string()
+                    }
+                })
+                .unwrap_or_else(|| "unknown".to_owned())
+        );
+
         let job_status = match shell.jobs() {
             0 => "".to_owned(),
             1 => "*".to_owned(),
             num => format!("*{num}"),
         };
 
-        let prompt_prefix = format!("[{}{}] {}", status, extra_status, job_status);
+        let prompt_prefix = format!("[{}{}] {} {}", status, extra_status, cwd, job_status);
 
         use line_editor::EditError;
         let line = match line_editor.read_line(prompt_prefix) {
