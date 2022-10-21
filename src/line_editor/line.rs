@@ -251,7 +251,7 @@ impl Line {
         let len = self.buf.len();
 
         self.cursor = 0;
-        while self.cursor <= len {
+        while self.cursor < len {
             if !self.buf[self.cursor].0.is_whitespace() {
                 break;
             }
