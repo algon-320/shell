@@ -184,6 +184,9 @@ impl EditorMode for NormalMode {
                     cmds.push(Command::Redo);
                 }
 
+                Event::Ctrl('o') => cmds.push(Command::CdUndo),
+                Event::KeyTab => cmds.push(Command::CdRedo),
+
                 _ => {}
             },
 
@@ -271,6 +274,8 @@ impl EditorMode for InsertMode {
 
             Event::KeyTab => cmds.push(Command::TryCompleteFilename),
             Event::Ctrl('d') => cmds.push(Command::DisplayCompletionCandidate),
+
+            Event::Ctrl('p') => cmds.push(Command::CdToParent),
 
             _ => {}
         }

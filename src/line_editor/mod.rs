@@ -63,6 +63,9 @@ enum Command {
     Redo,
     TryCompleteFilename,
     DisplayCompletionCandidate,
+    CdToParent,
+    CdUndo,
+    CdRedo,
 }
 
 pub enum EditError {
@@ -510,6 +513,22 @@ impl LineEditor {
                             print!("\r\n");
                             stdout().flush().unwrap();
                         }
+                    }
+
+                    Command::CdToParent => {
+                        // FIXME
+                        print!("\r\n\x1b[J");
+                        return Ok("cd ..".to_string());
+                    }
+                    Command::CdUndo => {
+                        // FIXME
+                        print!("\r\n\x1b[J");
+                        return Ok("cd -".to_string());
+                    }
+                    Command::CdRedo => {
+                        // FIXME
+                        print!("\r\n\x1b[J");
+                        return Ok("cd +".to_string());
                     }
                 }
 
