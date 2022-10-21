@@ -94,6 +94,9 @@ pub struct Shell {
     shell_pgid: Pgid,
     env: Env,
     jobs: HashMap<Pgid, Job>,
+
+    cd_undo_stack: Vec<PathBuf>,
+    cd_redo_stack: Vec<PathBuf>,
 }
 
 impl Shell {
@@ -144,6 +147,9 @@ impl Shell {
             shell_pgid,
             env: Env::new(),
             jobs: HashMap::new(),
+
+            cd_undo_stack: Vec::new(),
+            cd_redo_stack: Vec::new(),
         }
     }
 
@@ -720,34 +726,89 @@ fn builtin_exit(shell: &mut Shell, _args: &[CString], _io: Io) -> i32 {
 }
 
 fn builtin_cd(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
-    let old_cwd = std::env::current_dir();
+    enum Op {
+        Undo,
+        Redo,
+        Chdir(PathBuf),
+    }
 
-    let new_cwd = args
-        .get(1)
-        .map(|c| str_c_to_os(c).to_owned())
-        .unwrap_or_else(|| {
+    let op = match args.get(1) {
+        None => {
             let home = shell
                 .env
                 .get_env("HOME")
                 .unwrap_or_else(|| str_r_to_os("."));
-            home.to_owned()
-        });
-
-    match std::env::set_current_dir(Path::new(&new_cwd)) {
-        Err(err) => {
-            let _ = writeln!(&mut io.error, "cd: {err}");
-            1
+            Op::Chdir(Path::new(home).to_owned())
         }
 
-        Ok(_) => {
-            if let Ok(old_cwd) = old_cwd {
-                shell.env.set_env("OLDPWD", old_cwd.as_os_str().to_owned());
+        Some(arg1) if arg1.as_bytes() == b"-" => Op::Undo,
+        Some(arg1) if arg1.as_bytes() == b"+" => Op::Redo,
+        Some(arg1) => Op::Chdir(Path::new(str_c_to_os(arg1)).to_owned()),
+    };
+
+    let old_cwd = std::env::current_dir();
+
+    match op {
+        Op::Undo => {
+            if let Some(new_cwd) = shell.cd_undo_stack.pop() {
+                if let Ok(old_cwd) = old_cwd {
+                    shell.env.set_env("OLDPWD", old_cwd.as_os_str().to_owned());
+                    shell.cd_redo_stack.push(old_cwd);
+                }
+
+                match std::env::set_current_dir(&new_cwd) {
+                    Err(err) => {
+                        let _ = writeln!(&mut io.error, "cd: {err}");
+                        1
+                    }
+                    Ok(_) => {
+                        shell.env.set_env("PWD", new_cwd.into_os_string());
+                        0
+                    }
+                }
+            } else {
+                2
+            }
+        }
+
+        Op::Redo => {
+            if let Some(new_cwd) = shell.cd_redo_stack.pop() {
+                if let Ok(old_cwd) = old_cwd {
+                    shell.env.set_env("OLDPWD", old_cwd.as_os_str().to_owned());
+                    shell.cd_undo_stack.push(old_cwd);
+                }
+
+                match std::env::set_current_dir(&new_cwd) {
+                    Err(err) => {
+                        let _ = writeln!(&mut io.error, "cd: {err}");
+                        1
+                    }
+                    Ok(_) => {
+                        shell.env.set_env("PWD", new_cwd.into_os_string());
+                        0
+                    }
+                }
+            } else {
+                2
+            }
+        }
+
+        Op::Chdir(new_cwd) => match std::env::set_current_dir(&new_cwd) {
+            Err(err) => {
+                let _ = writeln!(&mut io.error, "cd: {err}");
+                1
             }
 
-            shell.env.set_env("PWD", new_cwd.to_owned());
-
-            0
-        }
+            Ok(_) => {
+                if let Ok(old_cwd) = old_cwd {
+                    shell.env.set_env("OLDPWD", old_cwd.as_os_str().to_owned());
+                    shell.cd_undo_stack.push(old_cwd);
+                }
+                shell.env.set_env("PWD", new_cwd.into_os_string());
+                shell.cd_redo_stack.clear();
+                0
+            }
+        },
     }
 }
 
