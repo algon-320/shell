@@ -479,7 +479,7 @@ impl Shell {
                             }
                         }
 
-                        if !matches!(buf.last(), Some(b' ')) {
+                        if matches!(buf.last(), Some(b' ')) {
                             buf.pop();
                         }
                     }
