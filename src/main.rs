@@ -50,7 +50,10 @@ fn main() {
             num => format!("*{num}"),
         };
 
-        let prompt_prefix = format!("[{}{}] {} {}", status, extra_status, cwd, job_status);
+        let prompt_prefix = format!(
+            "(\x1b[m)[{}{}] {} {}",
+            status, extra_status, cwd, job_status
+        );
 
         use line_editor::EditError;
         let line = match line_editor.read_line(prompt_prefix) {

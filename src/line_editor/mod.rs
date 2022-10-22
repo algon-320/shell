@@ -80,12 +80,6 @@ pub struct LineEditor {
     mode: Mode,
     registers: HashMap<char, String>,
     line_history: Vec<Line>,
-    temporal: Vec<Line>,
-    row: isize,
-    history_search_start_idx: usize,
-
-    undo_stack: Vec<Line>,
-    redo_stack: Vec<Line>,
 }
 
 impl Drop for LineEditor {
@@ -99,55 +93,11 @@ impl LineEditor {
         Self {
             mode: Mode::Insert(InsertMode::default()),
             registers: HashMap::new(),
-
-            // TODO: restore saved history
             line_history: Vec::new(),
-            temporal: Vec::new(),
-            row: 0,
-            history_search_start_idx: 0,
-
-            undo_stack: Vec::new(),
-            redo_stack: Vec::new(),
         }
     }
 
     pub fn read_line(&mut self, prompt_prefix: String) -> Result<String, EditError> {
-        let (prompt_prefix, prompt_prefix_length) = {
-            let mut buf = String::new();
-            let mut len = 0;
-
-            let mut ignore = 0;
-            let mut escaped = false;
-
-            for ch in prompt_prefix.chars() {
-                if !escaped && ch == '\\' {
-                    escaped = true;
-                    continue;
-                }
-
-                if !escaped && ch == '(' {
-                    ignore += 1;
-                }
-
-                if escaped || (ch != '(' && ch != ')') {
-                    buf.push(ch);
-                }
-
-                if ignore == 0 {
-                    use unicode_width::UnicodeWidthChar as _;
-                    len += ch.width().unwrap_or(1);
-                }
-
-                if !escaped && ch == ')' {
-                    ignore -= 1;
-                }
-
-                escaped = false;
-            }
-
-            (buf, len)
-        };
-
         let saved_termios = enable_raw_mode();
 
         let _defer = Defer::new(|| {
@@ -158,21 +108,35 @@ impl LineEditor {
             stdout().flush().unwrap();
         });
 
-        macro_rules! current_line {
-            () => {{
-                let len = self.temporal.len() as isize;
-                self.temporal
-                    .get_mut((len - 1 + self.row) as usize)
-                    .unwrap()
-            }};
-        }
-
         self.new_line();
+
+        let mut temporal: Vec<Line> = Vec::new();
+        let mut row: isize = 0;
+        let mut history_search_start_idx: usize = 0;
+
+        let mut undo_stack: Vec<Line> = Vec::new();
+        let mut redo_stack: Vec<Line> = Vec::new();
+
+        {
+            let line = Line::new();
+            temporal.push(line.clone());
+
+            if self.mode.is_insert() {
+                undo_stack.push(line);
+            }
+        }
 
         let file_completion = completion::FileCompletion::new_cwd();
         let mut last_candidates: Vec<String> = Vec::new();
         let mut last_completion_len: usize = 0;
         let mut last_command = Command::Commit;
+
+        macro_rules! current_line {
+            () => {{
+                let len = temporal.len() as isize;
+                temporal.get_mut((len - 1 + row) as usize).unwrap()
+            }};
+        }
 
         // Save cursor
         print!("\x1b7");
@@ -184,27 +148,30 @@ impl LineEditor {
                 // TODO: support multi-line editing
                 let line = current_line!();
 
+                let color = match self.mode {
+                    Mode::Insert(..) => "\x1b[36;1m",
+                    Mode::Normal(..) => "\x1b[34;1m",
+                    Mode::Visual(..) => "\x1b[32;1m",
+                    Mode::Search(..) => "\x1b[38;5;209;1m",
+                };
+
+                let prompt_sign = if unistd::geteuid().is_root() {
+                    "#"
+                } else {
+                    "%"
+                };
+
+                let (prompt, prompt_length) = Self::unescape_prompt(&format!(
+                    "{prompt_prefix}({color}){prompt_sign}(\x1b[m) "
+                ));
+
                 // Restore cursor
                 print!("\x1b8");
 
                 // Erase lines
                 print!("\x1b[K");
 
-                print!("{prompt_prefix}");
-                match self.mode {
-                    Mode::Insert(..) => {
-                        print!("\x1b[36;1m%\x1b[m ");
-                    }
-                    Mode::Normal(..) => {
-                        print!("\x1b[34;1m%\x1b[m ");
-                    }
-                    Mode::Visual(..) => {
-                        print!("\x1b[32;1m%\x1b[m ");
-                    }
-                    Mode::Search(..) => {
-                        print!("\x1b[38;5;209;1m%\x1b[m ");
-                    }
-                }
+                print!("{prompt}");
 
                 let hl_range = match &self.mode {
                     Mode::Visual(vis_mode) => {
@@ -236,7 +203,7 @@ impl LineEditor {
                 };
 
                 let terminal_width = terminal_size::get_cols() as usize;
-                let mut line_length = prompt_prefix_length + 2; // FIXME
+                let mut line_length = prompt_length;
 
                 for (i, (ch, width)) in line.iter(..).enumerate() {
                     line_length += width;
@@ -259,9 +226,8 @@ impl LineEditor {
                 }
 
                 print!("\x1b8");
-                let cursor_step = prompt_prefix_length
-                    + 2
-                    + line.iter(..).take(line.cursor()).fold(0, |a, (_, w)| a + w);
+                let cursor_step =
+                    prompt_length + line.iter(..).take(line.cursor()).fold(0, |a, (_, w)| a + w);
                 if cursor_step > 0 {
                     print!("\x1b[{}C", cursor_step);
                 }
@@ -379,43 +345,43 @@ impl LineEditor {
                     }
 
                     Command::HistoryPrev => {
-                        let new_row = self.row - 1;
-                        if self.temporal.len() as isize - 1 + new_row >= 0 {
-                            self.row = new_row;
+                        let new_row = row - 1;
+                        if temporal.len() as isize - 1 + new_row >= 0 {
+                            row = new_row;
                             current_line!().cursor_end_of_line();
                         } else {
                             // copy from line_history
                             let i = self.line_history.len() as isize + new_row;
                             if i >= 0 {
                                 let picked_line = self.line_history[i as usize].clone();
-                                self.temporal.insert(0, picked_line);
-                                self.row = new_row;
+                                temporal.insert(0, picked_line);
+                                row = new_row;
                                 current_line!().cursor_end_of_line();
                             }
                         }
                     }
                     Command::HistoryNext => {
-                        if self.row < 0 {
-                            self.row += 1;
+                        if row < 0 {
+                            row += 1;
                             current_line!().cursor_end_of_line();
                         }
                     }
 
                     Command::HistorySearch { query, reset } => {
                         if reset {
-                            self.history_search_start_idx = self.line_history.len() - 1;
+                            history_search_start_idx = self.line_history.len() - 1;
                         }
 
                         let mut matched = false;
-                        let idx = self.history_search_start_idx;
+                        let idx = history_search_start_idx;
 
                         for (i, h) in self.line_history[0..idx].iter().enumerate().rev() {
                             let line = h.to_string();
                             if let Some(pos) = line.find(&query) {
-                                self.row = 0;
+                                row = 0;
                                 *current_line!() = h.clone();
                                 matched = true;
-                                self.history_search_start_idx = i;
+                                history_search_start_idx = i;
 
                                 let pre = line[..pos].chars().count();
                                 let len = query.chars().count();
@@ -429,10 +395,10 @@ impl LineEditor {
                             for (i, h) in self.line_history[idx..].iter().enumerate().rev() {
                                 let line = h.to_string();
                                 if let Some(pos) = line.find(&query) {
-                                    self.row = 0;
+                                    row = 0;
                                     *current_line!() = h.clone();
                                     matched = true;
-                                    self.history_search_start_idx = i;
+                                    history_search_start_idx = i;
 
                                     let pre = line[..pos].chars().count();
                                     let len = query.chars().count();
@@ -446,7 +412,7 @@ impl LineEditor {
                         if !matched {
                             let mut line = Line::from(query.as_str());
                             line.cursor_end_of_line();
-                            self.row = 0;
+                            row = 0;
                             *current_line!() = line;
                         }
                     }
@@ -515,18 +481,18 @@ impl LineEditor {
                     }
 
                     Command::MakeCheckPoint => {
-                        self.undo_stack.push(current_line!().clone());
-                        self.redo_stack.clear();
+                        undo_stack.push(current_line!().clone());
+                        redo_stack.clear();
                     }
                     Command::Undo => {
-                        if let Some(line) = self.undo_stack.pop() {
-                            self.redo_stack.push(current_line!().clone());
+                        if let Some(line) = undo_stack.pop() {
+                            redo_stack.push(current_line!().clone());
                             *current_line!() = line;
                         }
                     }
                     Command::Redo => {
-                        if let Some(line) = self.redo_stack.pop() {
-                            self.undo_stack.push(current_line!().clone());
+                        if let Some(line) = redo_stack.pop() {
+                            undo_stack.push(current_line!().clone());
                             *current_line!() = line;
                         }
                     }
@@ -618,7 +584,7 @@ impl LineEditor {
 
         print!("\r\n\x1b[J");
 
-        let line = self.commit();
+        let line = current_line!().clone();
         let result = line.to_string();
         if !result.is_empty() {
             self.line_history.push(line);
@@ -627,32 +593,49 @@ impl LineEditor {
         Ok(result)
     }
 
+    // Returns a pair of (unescaped string, print length)
+    fn unescape_prompt(prompt: &str) -> (String, usize) {
+        let mut buf = String::new();
+        let mut len = 0;
+
+        let mut ignore = 0;
+        let mut escaped = false;
+
+        for ch in prompt.chars() {
+            if !escaped && ch == '\\' {
+                escaped = true;
+                continue;
+            }
+
+            if !escaped && ch == '(' {
+                ignore += 1;
+            }
+
+            if escaped || (ch != '(' && ch != ')') {
+                buf.push(ch);
+            }
+
+            if ignore == 0 {
+                use unicode_width::UnicodeWidthChar as _;
+                len += ch.width().unwrap_or(1);
+            }
+
+            if !escaped && ch == ')' {
+                ignore -= 1;
+            }
+
+            escaped = false;
+        }
+
+        (buf, len)
+    }
+
     fn new_line(&mut self) {
         let new_mode = match self.mode {
             Mode::Insert(..) | Mode::Search(..) => Mode::Insert(InsertMode::default()),
             Mode::Normal(..) | Mode::Visual(..) => Mode::Normal(NormalMode::default()),
         };
         self.mode = new_mode;
-
-        let line = Line::new();
-        self.temporal.clear();
-        self.temporal.push(line.clone());
-        self.row = 0;
-
-        self.undo_stack.clear();
-        self.redo_stack.clear();
-
-        if self.mode.is_insert() {
-            self.undo_stack.push(line);
-        }
-    }
-
-    fn commit(&mut self) -> Line {
-        let len = self.temporal.len() as isize;
-        let line = self.temporal.swap_remove((len - 1 + self.row) as usize);
-        self.temporal.clear();
-        self.row = 0;
-        line
     }
 }
 
