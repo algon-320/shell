@@ -292,6 +292,7 @@ impl EditorMode for NormalMode {
 
                 Event::Ctrl('o') => cmds.push(Command::CdUndo),
                 Event::KeyTab => cmds.push(Command::CdRedo),
+                Event::Ctrl('p') => cmds.push(Command::CdToParent),
 
                 _ => {}
             },

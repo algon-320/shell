@@ -138,13 +138,8 @@ impl LineEditor {
             }};
         }
 
-        // Save cursor
-        print!("\x1b7");
-        stdout().flush().unwrap();
-
-        let mut read_buf = vec![0_u8; 32];
-        'edit: loop {
-            {
+        macro_rules! update_line {
+            () => {{
                 // TODO: support multi-line editing
                 let line = current_line!();
 
@@ -165,13 +160,9 @@ impl LineEditor {
                     "{prompt_prefix}({color}){prompt_sign}(\x1b[m) "
                 ));
 
-                // Restore cursor
-                print!("\x1b8");
-
-                // Erase lines
-                print!("\x1b[K");
-
-                print!("{prompt}");
+                print!("\x1b8"); // Restore cursor
+                print!("\x1b[K"); // Erase lines
+                print!("{prompt}"); // Prompt
 
                 let hl_range = match &self.mode {
                     Mode::Visual(vis_mode) => {
@@ -240,7 +231,16 @@ impl LineEditor {
                 }
 
                 stdout().flush().unwrap();
-            }
+            }};
+        }
+
+        // Save cursor
+        print!("\x1b7");
+        stdout().flush().unwrap();
+
+        let mut read_buf = vec![0_u8; 32];
+        'edit: loop {
+            update_line!();
 
             let nb = unistd::read(STDIN_FILENO, &mut read_buf[..]).expect("read STDIN");
             let input = &read_buf[..nb];
@@ -559,17 +559,20 @@ impl LineEditor {
 
                     Command::CdToParent => {
                         // FIXME
-                        print!("\r\n\x1b[J");
+                        print!("\r\n\x1b[J\x1b[A");
+                        stdout().flush().unwrap();
                         return Ok("cd ..".to_string());
                     }
                     Command::CdUndo => {
                         // FIXME
-                        print!("\r\n\x1b[J");
+                        print!("\r\n\x1b[J\x1b[A");
+                        stdout().flush().unwrap();
                         return Ok("cd -".to_string());
                     }
                     Command::CdRedo => {
                         // FIXME
-                        print!("\r\n\x1b[J");
+                        print!("\r\n\x1b[J\x1b[A");
+                        stdout().flush().unwrap();
                         return Ok("cd +".to_string());
                     }
                 }
@@ -582,7 +585,10 @@ impl LineEditor {
             }
         }
 
+        update_line!();
+
         print!("\r\n\x1b[J");
+        stdout().flush().unwrap();
 
         let line = current_line!().clone();
         let result = line.to_string();
