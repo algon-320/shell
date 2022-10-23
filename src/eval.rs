@@ -209,7 +209,7 @@ impl Shell {
                 for job in self.jobs.values_mut() {
                     for p in job.members.values_mut() {
                         if p.pid == pid {
-                            eprintln!("\x1b[7mprocess {pid} is terminated by {signal:?}\x1b[m");
+                            // eprintln!("\x1b[7mprocess {pid} is terminated by {signal:?}\x1b[m");
                             let signaled = 128 + signal as i32;
                             p.status = Some(signaled);
                             job.last_status = Some(signaled);
@@ -225,7 +225,7 @@ impl Shell {
                 for job in self.jobs.values_mut() {
                     for p in job.members.values_mut() {
                         if p.pid == pid {
-                            eprintln!("\x1b[7mprocess {pid} is stopped by {signal:?}\x1b[m");
+                            // eprintln!("\x1b[7mprocess {pid} is stopped by {signal:?}\x1b[m");
                             p.stopped = true;
                             let signaled = 128 + signal as i32;
                             job.last_status = Some(signaled);
