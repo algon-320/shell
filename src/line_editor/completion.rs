@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use crate::eval::expand_tilde;
+
 pub(super) struct FileCompletion {
     base_dir: Option<PathBuf>,
 }
@@ -17,11 +19,20 @@ impl FileCompletion {
 
     fn find(&self, partial: &str) -> Option<Vec<String>> {
         let mut path = self.base_dir.clone()?;
-        let partial_path = Path::new(partial);
-        if partial_path.is_relative() {
-            path.extend(partial_path);
+
+        if partial.starts_with('~') {
+            use std::ffi::OsString;
+            use std::os::unix::ffi::OsStringExt as _;
+
+            let expanded = expand_tilde(partial.as_bytes());
+            path = PathBuf::from(OsString::from_vec(expanded));
         } else {
-            path = partial_path.to_owned();
+            let partial_path = Path::new(partial);
+            if partial_path.is_absolute() {
+                path = partial_path.to_owned();
+            } else {
+                path.extend(partial_path);
+            }
         }
 
         let dir_name = if partial.ends_with(std::path::MAIN_SEPARATOR) {
