@@ -284,6 +284,25 @@ pub fn builtin_var(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
     1
 }
 
+pub fn builtin_var_bang(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
+    debug_assert!(!args.is_empty());
+
+    if args.len() == 1 {
+        for (key, val) in shell.env.env_vars.iter() {
+            println!("{:?} => {:?}", key, val);
+        }
+        return 0;
+    } else if args.len() == 4 && args[2].as_bytes() == b"=" {
+        let key = str_c_to_os(&args[1]).to_owned();
+        let val = str_c_to_os(&args[3]).to_owned();
+        shell.env.env_vars.insert(key, val);
+        return 0;
+    }
+
+    let _ = writeln!(&mut io.error, "var!: invalid assignment");
+    1
+}
+
 pub fn builtin_export(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
     debug_assert!(!args.is_empty());
 
