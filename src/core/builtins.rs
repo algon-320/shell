@@ -250,8 +250,8 @@ pub fn builtin_alias(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
             println!("{:?} => {:?}", alias, values);
         }
         return 0;
-    } else if args[2].as_bytes() == b"=" {
-        // % alias foo = bar
+    } else if args.len() >= 4 && args[2].as_bytes() == b"=" {
+        // % alias foo = bar ...
         let name = str_c_to_os(&args[1]).to_owned();
         let values: Vec<OsString> = args[3..]
             .iter()
