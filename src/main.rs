@@ -1,7 +1,5 @@
-mod ast;
 mod completion;
-mod eval;
-mod io;
+mod core;
 mod line_editor;
 mod terminal_size;
 
@@ -9,7 +7,7 @@ fn main() {
     terminal_size::init();
 
     let mut line_editor = line_editor::LineEditor::new();
-    let mut shell = eval::Shell::new();
+    let mut shell = core::Shell::new();
     let mut last_status = 0;
 
     loop {
@@ -84,14 +82,6 @@ fn main() {
             continue;
         }
 
-        match ast::parser::toplevel(line) {
-            Ok(program) => {
-                last_status = shell.eval(&program);
-            }
-            Err(_err) => {
-                eprintln!("Syntax Error");
-                last_status = 127;
-            }
-        }
+        last_status = shell.eval(line);
     }
 }

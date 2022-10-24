@@ -66,7 +66,7 @@ impl Complete for StaticWordCompletion {
     }
 }
 
-use crate::eval::expand_tilde;
+use crate::core::expand_tilde;
 
 pub struct FileCompletion(());
 
