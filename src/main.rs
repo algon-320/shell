@@ -1,4 +1,5 @@
 mod ast;
+mod completion;
 mod eval;
 mod io;
 mod line_editor;
@@ -12,6 +13,10 @@ fn main() {
     let mut last_status = 0;
 
     loop {
+        line_editor
+            .command_completion
+            .update_commands(shell.list_commands());
+
         let status = if last_status == 0 {
             format!("(\x1b[32m){:3}(\x1b[m)", last_status)
         } else {

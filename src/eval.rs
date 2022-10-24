@@ -576,6 +576,14 @@ impl Shell {
             Err(_) => panic!("fork failed"),
         }
     }
+
+    pub fn list_commands(&self) -> Vec<String> {
+        self.env
+            .commands
+            .keys()
+            .filter_map(|os| Some(std::str::from_utf8(os.as_bytes()).ok()?.to_owned()))
+            .collect()
+    }
 }
 
 pub fn expand_tilde(bytes: &[u8]) -> Vec<u8> {

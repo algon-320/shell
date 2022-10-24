@@ -1,4 +1,3 @@
-mod completion;
 mod line;
 mod modes;
 mod text_object;
@@ -9,6 +8,7 @@ use nix::unistd;
 use std::collections::HashMap;
 use std::io::{stdout, Write as _};
 
+use crate::completion;
 use crate::terminal_size;
 use line::*;
 use modes::*;
@@ -80,6 +80,7 @@ pub struct LineEditor {
     mode: Mode,
     registers: HashMap<char, String>,
     line_history: Vec<Line>,
+    pub command_completion: Box<completion::CommandCompletion>,
 }
 
 impl Drop for LineEditor {
@@ -90,10 +91,17 @@ impl Drop for LineEditor {
 
 impl LineEditor {
     pub fn new() -> Self {
+        use completion::{CommandCompletion, FileCompletion};
+        let command_completion = Box::new(CommandCompletion::new(
+            Vec::new(),
+            Box::new(FileCompletion::new()),
+        ));
+
         Self {
             mode: Mode::Insert(InsertMode::default()),
             registers: HashMap::new(),
             line_history: Vec::new(),
+            command_completion,
         }
     }
 
@@ -126,10 +134,8 @@ impl LineEditor {
             }
         }
 
-        let file_completion = completion::FileCompletion::new_cwd();
-        let mut last_candidates: Vec<String> = Vec::new();
-        let mut last_completion_len: usize = 0;
         let mut last_command = Command::Commit;
+        let mut completion = CompletionEngine::new(&*self.command_completion);
 
         macro_rules! current_line {
             () => {{
@@ -498,58 +504,43 @@ impl LineEditor {
                     }
 
                     Command::TryCompleteFilename => {
-                        // update completion candidates
-                        if (last_command != Command::TryCompleteFilename
-                            && last_command != Command::DisplayCompletionCandidate)
-                            || (last_candidates.len() == 1
-                                && last_candidates[0].ends_with(std::path::MAIN_SEPARATOR))
-                        {
-                            last_completion_len = 0;
+                        let last_command_is_completion = last_command
+                            == Command::TryCompleteFilename
+                            || last_command == Command::DisplayCompletionCandidate;
 
-                            if let Some(part) = current_line!().last_word(true) {
-                                let cand = file_completion.candidates(&part);
-                                last_candidates = cand;
-                            } else {
-                                last_candidates.clear();
-                            }
-                        }
-
-                        let mut comp = String::new();
-                        if !last_candidates.is_empty() {
-                            let next = last_candidates.remove(0);
-                            last_candidates.push(next.clone());
-                            comp = next;
+                        // contiguous TryCompleteFilename would not update the candidates
+                        if !last_command_is_completion || completion.cleared() {
+                            // update completion candidates
+                            completion.update(current_line!().to_string());
                         }
 
                         let line = current_line!();
+
+                        let last_completion_len =
+                            completion.prev().map(|l| l.chars().count()).unwrap_or(0);
+
                         for _ in 0..last_completion_len {
                             line.delete_prev();
                         }
 
-                        let mut comp_len = 0;
-                        for ch in comp.chars() {
-                            current_line!().insert(ch);
-                            comp_len += 1;
-                        }
+                        if let Some(cand) = completion.next() {
+                            for ch in cand.chars() {
+                                current_line!().insert(ch);
+                            }
 
-                        last_completion_len = comp_len;
-                    }
-                    Command::DisplayCompletionCandidate => {
-                        // update completion candidates
-                        {
-                            last_completion_len = 0;
-
-                            if let Some(part) = current_line!().last_word(true) {
-                                let cand = file_completion.candidates(&part);
-                                last_candidates = cand;
-                            } else {
-                                last_candidates.clear();
+                            // commit it if there is only a single choice
+                            if completion.len() == 1 {
+                                completion.clear();
                             }
                         }
+                    }
+                    Command::DisplayCompletionCandidate => {
+                        // always update completion candidates
+                        completion.update(current_line!().to_string());
 
                         if let Some(prefix) = current_line!().last_word(true) {
                             print!("\r\n\x1b[J");
-                            for cand in last_candidates.iter() {
+                            for cand in completion.iter() {
                                 print!("{prefix}{cand}\t");
                             }
                             print!("\r\n");
@@ -642,6 +633,74 @@ impl LineEditor {
             Mode::Normal(..) | Mode::Visual(..) => Mode::Normal(NormalMode::default()),
         };
         self.mode = new_mode;
+    }
+}
+
+pub struct CompletionEngine<'a> {
+    completion: &'a dyn completion::Complete,
+    candidates: Vec<String>,
+    line: String,
+    dirty: u8,
+}
+
+impl<'a> CompletionEngine<'a> {
+    pub fn new(completion: &'a dyn completion::Complete) -> Self {
+        Self {
+            completion,
+            candidates: Vec::new(),
+            line: String::new(),
+            dirty: 0,
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.candidates.clear();
+        self.line.clear();
+        self.dirty = 0;
+    }
+
+    pub fn cleared(&mut self) -> bool {
+        self.dirty == 0
+    }
+
+    pub fn update(&mut self, line: String) {
+        if self.line != line {
+            let mut words: Vec<&str> = line.split_ascii_whitespace().collect();
+            if line.ends_with(' ') {
+                words.push("");
+            }
+
+            self.candidates = self.completion.candidates(&words);
+            self.line = line;
+            self.dirty = 1;
+        }
+    }
+
+    pub fn next(&mut self) -> Option<&str> {
+        if self.candidates.is_empty() {
+            return None;
+        }
+
+        self.dirty = 2;
+        let cand = self.candidates.remove(0);
+        self.candidates.push(cand);
+        self.candidates.last().map(String::as_str)
+    }
+
+    pub fn prev(&self) -> Option<&str> {
+        if self.dirty == 2 {
+            self.candidates.last().map(String::as_str)
+        } else {
+            None
+        }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &str> + '_ {
+        self.candidates.iter().map(String::as_str)
+    }
+
+    pub fn len(&self) -> usize {
+        self.candidates.len()
     }
 }
 
