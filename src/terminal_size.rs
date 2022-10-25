@@ -30,7 +30,7 @@ extern "C" fn sigwinch_handler(_: i32) {
     update();
 }
 
-fn update() {
+pub fn update() {
     let mut winsize = nix::pty::Winsize {
         ws_row: 0,
         ws_col: 0,

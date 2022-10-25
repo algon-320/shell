@@ -11,6 +11,8 @@ fn main() {
     let mut last_status = 0;
 
     loop {
+        terminal_size::update();
+
         line_editor
             .command_completion
             .update_commands(shell.list_commands());
