@@ -665,6 +665,7 @@ impl<'a> CompletionEngine<'a> {
 
     pub fn update(&mut self, line: String) {
         if self.line != line {
+            // FIXME: ignore "\ " pattern
             let mut words: Vec<&str> = line.split_ascii_whitespace().collect();
             if line.ends_with(' ') {
                 words.push("");
