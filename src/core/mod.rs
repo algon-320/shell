@@ -12,6 +12,7 @@ use std::io::Read;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 
+use crate::terminal_size;
 use ast::*;
 use io::{pipe_pair, Io};
 
@@ -597,6 +598,16 @@ impl Shell {
             .keys()
             .filter_map(|os| Some(std::str::from_utf8(os.as_bytes()).ok()?.to_owned()))
             .collect()
+    }
+
+    pub fn update_variables(&mut self) {
+        let nrows = terminal_size::get_rows();
+        let nrows = OsString::from(nrows.to_string());
+        self.env.set_env("LINES", nrows);
+
+        let ncols = terminal_size::get_cols();
+        let ncols = OsString::from(ncols.to_string());
+        self.env.set_env("COLUMNS", ncols);
     }
 }
 

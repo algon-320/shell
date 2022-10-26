@@ -12,6 +12,7 @@ fn main() {
 
     loop {
         terminal_size::update();
+        shell.update_variables();
 
         line_editor
             .command_completion
