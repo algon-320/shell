@@ -284,7 +284,7 @@ pub fn builtin_var(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
     1
 }
 
-pub fn builtin_var_bang(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
+pub fn builtin_evar(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
     debug_assert!(!args.is_empty());
 
     if args.len() == 1 {
@@ -299,22 +299,6 @@ pub fn builtin_var_bang(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 
         return 0;
     }
 
-    let _ = writeln!(&mut io.error, "var!: invalid assignment");
+    let _ = writeln!(&mut io.error, "evar: invalid assignment");
     1
-}
-
-pub fn builtin_export(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
-    debug_assert!(!args.is_empty());
-
-    let mut status = 0;
-    for arg in args[1..].iter() {
-        let name = str_c_to_os(arg);
-        if let Some(value) = shell.env.shell_vars.get(name) {
-            shell.env.env_vars.insert(name.to_owned(), value.to_owned());
-        } else {
-            let _ = writeln!(&mut io.error, "export: variable {:?} is undefined", name);
-            status = 1;
-        }
-    }
-    status
 }

@@ -688,11 +688,8 @@ impl Env {
             let var = Executable::Builtin(builtin_var);
             self.commands.insert("var".into(), var);
 
-            let var_bang = Executable::Builtin(builtin_var_bang);
-            self.commands.insert("var!".into(), var_bang);
-
-            let export = Executable::Builtin(builtin_export);
-            self.commands.insert("export".into(), export);
+            let evar = Executable::Builtin(builtin_evar);
+            self.commands.insert("evar".into(), evar);
         }
     }
 
