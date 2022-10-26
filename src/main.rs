@@ -19,18 +19,14 @@ fn main() {
             .update_commands(shell.list_commands());
 
         let status = if last_status == 0 {
+            // successful
             format!("(\x1b[32m){:3}(\x1b[m)", last_status)
-        } else {
+        } else if last_status < 128 {
+            // error
             format!("(\x1b[31m){:3}(\x1b[m)", last_status)
-        };
-
-        let extra_status = if last_status >= 128 {
-            format!(
-                ":(\x1b[33m){}(\x1b[m)",
-                nix::sys::signal::Signal::try_from(last_status - 128).unwrap()
-            )
         } else {
-            "".to_owned()
+            // signaled
+            format!("(\x1b[33m){:3}(\x1b[m)", last_status)
         };
 
         let cwd = format!(
@@ -56,10 +52,7 @@ fn main() {
             num => format!("*{num}"),
         };
 
-        let prompt_prefix = format!(
-            "(\x1b[m)[{}{}] {} {}",
-            status, extra_status, cwd, job_status
-        );
+        let prompt_prefix = format!("(\x1b[m)[{}] {} {}", status, cwd, job_status);
 
         use line_editor::EditError;
         let line = match line_editor.read_line(prompt_prefix) {
