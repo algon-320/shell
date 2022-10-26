@@ -113,7 +113,7 @@ impl FileCompletion {
         for ent in entries.filter_map(|ent| ent.ok()) {
             let ent_name = ent.file_name();
             if let Some(tail) = ent_name.to_str().and_then(|s| s.strip_prefix(file_name)) {
-                let tail = tail.to_owned();
+                let tail = Self::escape_special_characters(tail);
                 candidates.push(tail);
                 is_dir.push(ent.metadata().map(|meta| meta.is_dir()).unwrap());
             }
@@ -128,6 +128,23 @@ impl FileCompletion {
         }
 
         Some(candidates)
+    }
+
+    fn escape_special_characters(candidate: &str) -> String {
+        // example:
+        //   "foo bar" --> "foo\ bar"
+        //   "foo@bar" --> "foo\@bar"
+
+        let mut buf = String::new();
+        for ch in candidate.chars() {
+            if let '\\' | ' ' | '\t' | '\n' | '@' | ';' | '&' | '|' | '$' | '(' | ')' | '[' | ']'
+            | '\'' | '\"' | '=' | '?' | '{' | '}' = ch
+            {
+                buf.push('\\');
+            }
+            buf.push(ch);
+        }
+        buf
     }
 }
 
