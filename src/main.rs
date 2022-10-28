@@ -2,6 +2,7 @@ mod completion;
 mod core;
 mod line_editor;
 mod terminal_size;
+mod utils;
 
 fn main() {
     terminal_size::init();

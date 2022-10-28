@@ -108,7 +108,7 @@ impl LineEditor {
     pub fn read_line(&mut self, prompt_prefix: String) -> Result<String, EditError> {
         let saved_termios = enable_raw_mode();
 
-        let _defer = Defer::new(|| {
+        let _defer = crate::utils::Defer::new(|| {
             let now = termios::SetArg::TCSANOW;
             let _ = termios::tcsetattr(STDIN_FILENO, now, &saved_termios);
 
@@ -738,20 +738,4 @@ fn enable_raw_mode() -> termios::Termios {
     termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSANOW, &raw_mode).expect("tcsetattr");
 
     saved
-}
-
-struct Defer<F: FnOnce()> {
-    f: Option<F>,
-}
-impl<F: FnOnce()> Defer<F> {
-    fn new(f: F) -> Self {
-        Self { f: Some(f) }
-    }
-}
-impl<F: FnOnce()> Drop for Defer<F> {
-    fn drop(&mut self) {
-        if let Some(f) = self.f.take() {
-            f();
-        }
-    }
 }
