@@ -76,46 +76,42 @@ impl FileCompletion {
     }
 
     fn find(&self, partial: &str) -> Option<Vec<String>> {
-        let mut path = std::env::current_dir().ok()?;
-
-        if partial.starts_with('~') {
+        let mut path = if partial.starts_with('~') {
             use std::ffi::OsString;
             use std::os::unix::ffi::OsStringExt as _;
 
             let expanded = expand_tilde(partial.as_bytes());
-            path = PathBuf::from(OsString::from_vec(expanded));
+            PathBuf::from(OsString::from_vec(expanded))
         } else {
-            let partial_path = Path::new(partial);
-            if partial_path.is_absolute() {
-                path = partial_path.to_owned();
-            } else {
-                path.extend(partial_path);
-            }
+            Path::new(partial).to_owned()
+        };
+
+        if path.is_relative() {
+            let mut tmp = std::env::current_dir().ok()?;
+            tmp.extend(path.as_path());
+            path = tmp;
         }
 
-        let dir_name = if partial.ends_with(std::path::MAIN_SEPARATOR) {
-            path.as_path()
+        let (dir, pat);
+        if partial.ends_with(std::path::MAIN_SEPARATOR) || partial.is_empty() {
+            dir = path.as_path();
+            pat = "";
         } else {
-            path.parent()?
-        };
-
-        let file_name = if partial.ends_with(std::path::MAIN_SEPARATOR) {
-            ""
-        } else {
-            path.file_name()?.to_str()?
-        };
-
-        let entries = std::fs::read_dir(dir_name).ok()?;
+            dir = path.parent()?;
+            pat = path.file_name()?.to_str()?;
+        }
 
         let mut candidates = Vec::new();
         let mut is_dir = Vec::new();
 
+        let entries = std::fs::read_dir(dir).ok()?;
         for ent in entries.filter_map(|ent| ent.ok()) {
-            let ent_name = ent.file_name();
-            if let Some(tail) = ent_name.to_str().and_then(|s| s.strip_prefix(file_name)) {
-                let tail = Self::escape_special_characters(tail);
-                candidates.push(tail);
-                is_dir.push(ent.metadata().map(|meta| meta.is_dir()).unwrap());
+            if let Some(stripped) = ent.file_name().to_str().and_then(|s| s.strip_prefix(pat)) {
+                let cand = Self::escape_special_characters(stripped);
+                candidates.push(cand);
+
+                let ent_is_dir = ent.metadata().map(|m| m.is_dir()).unwrap_or(false);
+                is_dir.push(ent_is_dir);
             }
         }
 
