@@ -466,6 +466,7 @@ impl EditorMode for InsertMode {
             Event::Ctrl('d') => cmds.push(Command::DisplayCompletionCandidate),
 
             Event::Ctrl('p') => cmds.push(Command::CdToParent),
+            Event::Ctrl('o') => cmds.push(Command::CdUndo),
 
             Event::Ctrl('r') => {
                 cmds.push(Command::ChangeModeToSearch);
