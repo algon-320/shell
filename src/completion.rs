@@ -159,3 +159,89 @@ impl Complete for FileCompletion {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    macro_rules! set_eq {
+        ($a:expr, $b:expr) => {{
+            let a = HashSet::<String>::from_iter($a);
+            let b = HashSet::<String>::from_iter($b);
+            assert_eq!(a, b);
+        }};
+    }
+
+    #[test]
+    fn static_word_completion() {
+        let comp = StaticWordCompletion::new(vec![
+            "foo".into(),
+            "foobar".into(),
+            "fox".into(),
+            "bar".into(),
+        ]);
+        set_eq!(
+            comp.candidates(&["fo"]).into_iter(),
+            vec!["o".into(), "obar".into(), "x".into()] as Vec<String>
+        );
+        set_eq!(
+            comp.candidates(&["foo"]),
+            vec!["".into(), "bar".into()] as Vec<String>
+        );
+        set_eq!(comp.candidates(&["bar"]), vec!["".into()] as Vec<String>);
+        set_eq!(comp.candidates(&["ba"]), vec!["r".into()] as Vec<String>);
+
+        // containing space
+        let comp = StaticWordCompletion::new(vec!["foo bar".into()]);
+        set_eq!(
+            comp.candidates(&["fo"]),
+            vec!["o bar".into()] as Vec<String>
+        );
+        set_eq!(
+            comp.candidates(&["foo b"]),
+            vec!["ar".into()] as Vec<String>
+        );
+
+        // empty
+        let comp = StaticWordCompletion::new(vec![]);
+        set_eq!(comp.candidates(&["foo"]), vec![] as Vec<String>);
+        set_eq!(comp.candidates(&["bar"]), vec![] as Vec<String>);
+    }
+
+    fn create_file(name: &str) {
+        std::fs::write(name, b"").unwrap();
+    }
+    fn create_dir(name: &str) {
+        std::fs::create_dir(name).unwrap();
+    }
+
+    #[test]
+    fn file_completion() {
+        let old_dir = std::env::current_dir().unwrap();
+
+        std::env::set_current_dir("/tmp").unwrap();
+        create_file("./foo");
+        create_file("./foobar");
+        create_dir("./dir");
+
+        let _restore_cwd = crate::utils::Defer::new(move || {
+            std::env::set_current_dir(old_dir).unwrap();
+        });
+
+        let comp = FileCompletion::new();
+        set_eq!(
+            comp.candidates(&["foo"]),
+            vec!["".into(), "bar".into()] as Vec<String>
+        );
+        set_eq!(
+            comp.candidates(&["f"]),
+            vec!["oo".into(), "oobar".into()] as Vec<String>
+        );
+        set_eq!(
+            comp.candidates(&[""]),
+            vec!["foo".into(), "foobar".into(), "dir".into()] as Vec<String>
+        );
+        set_eq!(comp.candidates(&["d"]), vec!["ir/".into()] as Vec<String>);
+    }
+}
