@@ -6,6 +6,13 @@ use std::path::{Path, PathBuf};
 
 use super::{get_termios, set_termios, str_c_to_os, str_r_to_os, Io, Pgid, Shell};
 
+pub fn builtin_args(_shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
+    for (i, arg) in args.iter().enumerate().skip(1) {
+        let _ = writeln!(&mut io.output, "{i}: {:?}", arg);
+    }
+    0
+}
+
 pub fn builtin_exit(shell: &mut Shell, _args: &[CString], mut io: Io) -> i32 {
     if shell.jobs.is_empty() {
         std::process::exit(0);

@@ -675,6 +675,9 @@ impl Env {
         {
             use builtins::*;
 
+            let args = Executable::Builtin(builtin_args);
+            self.commands.insert("args".into(), args);
+
             let exit = Executable::Builtin(builtin_exit);
             self.commands.insert("exit".into(), exit);
 
