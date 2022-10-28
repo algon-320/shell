@@ -9,7 +9,7 @@ fn main() {
 
     let mut line_editor = line_editor::LineEditor::new();
     let mut shell = core::Shell::new();
-    let mut last_status = 0;
+    let mut last_status = eval_starup(&mut shell);
 
     loop {
         terminal_size::update();
@@ -58,10 +58,12 @@ fn main() {
         use line_editor::EditError;
         let line = match line_editor.read_line(prompt_prefix) {
             Ok(line) => line,
+
             Err(EditError::Aborted) => {
                 println!();
                 continue;
             }
+
             Err(EditError::Exitted) => {
                 if shell.jobs() == 0 {
                     println!("exit");
@@ -80,6 +82,32 @@ fn main() {
         }
 
         last_status = shell.eval(line);
+    }
+}
+
+fn eval_starup(shell: &mut core::Shell) -> i32 {
+    use std::io::{BufRead as _, BufReader};
+
+    if let Some(app_dir) = application_dir() {
+        let mut file_path = app_dir;
+        file_path.push("startup");
+
+        let file = match std::fs::File::open(&file_path) {
+            Ok(file) => file,
+            _ => return 1,
+        };
+
+        let mut status = 0;
+        for line in BufReader::new(file).lines().filter_map(|r| r.ok()) {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            status = shell.eval(line);
+        }
+        status
+    } else {
+        0
     }
 }
 
