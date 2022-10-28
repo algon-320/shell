@@ -21,7 +21,13 @@ impl CommandCompletion {
     }
 
     pub fn update_commands(&mut self, new_commands: Vec<String>) {
-        self.commands = StaticWordCompletion::new(new_commands);
+        self.commands = StaticWordCompletion::new(new_commands.clone());
+
+        // FIXME
+        self.rules.insert(
+            "sudo".to_owned(),
+            Box::new(StaticWordCompletion::new(new_commands)),
+        );
     }
 
     #[allow(unused)]
