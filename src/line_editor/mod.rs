@@ -85,12 +85,16 @@ pub struct LineEditor {
 
 impl Drop for LineEditor {
     fn drop(&mut self) {
-        // TODO: save `self.line_history` to a file
+        if let Err(err) = save_history(&self.line_history) {
+            eprintln!("Failed to save history: {err}");
+        }
     }
 }
 
 impl LineEditor {
     pub fn new() -> Self {
+        let line_history = load_history().unwrap_or_default();
+
         use completion::{CommandCompletion, FileCompletion};
         let command_completion = Box::new(CommandCompletion::new(
             Vec::new(),
@@ -100,7 +104,7 @@ impl LineEditor {
         Self {
             mode: Mode::Insert(InsertMode::default()),
             registers: HashMap::new(),
-            line_history: Vec::new(),
+            line_history,
             command_completion,
         }
     }
@@ -738,4 +742,37 @@ fn enable_raw_mode() -> termios::Termios {
     termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSANOW, &raw_mode).expect("tcsetattr");
 
     saved
+}
+
+fn save_history(history: &[Line]) -> std::io::Result<()> {
+    if let Some(app_dir) = crate::application_dir() {
+        let mut path = app_dir;
+        path.push("history");
+
+        let mut file = std::fs::File::options().append(true).open(path)?;
+        for line in history.iter() {
+            writeln!(file, "{}", line)?;
+        }
+    }
+    Ok(())
+}
+
+fn load_history() -> std::io::Result<Vec<Line>> {
+    use std::io::{BufRead as _, BufReader};
+
+    let mut history = Vec::new();
+    if let Some(app_dir) = crate::application_dir() {
+        let mut path = app_dir;
+        path.push("history");
+
+        let file = std::fs::File::open(path)?;
+        for line in BufReader::new(file).lines().filter_map(|r| r.ok()) {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            history.push(Line::from(line));
+        }
+    }
+    Ok(history)
 }

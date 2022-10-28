@@ -82,3 +82,11 @@ fn main() {
         last_status = shell.eval(line);
     }
 }
+
+// TODO: consider being XDG complient
+fn application_dir() -> Option<std::path::PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    let mut p = std::path::PathBuf::from(home);
+    p.push(".myshell");
+    Some(p)
+}
