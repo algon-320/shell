@@ -4,7 +4,8 @@ use std::ffi::{CString, OsString};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use super::{get_termios, set_termios, str_c_to_os, str_r_to_os, Io, Pgid, Shell};
+use super::io::Io;
+use super::{get_termios, set_termios, str_c_to_os, str_r_to_os, Pgid, Shell};
 
 pub fn builtin_args(_shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
     for (i, arg) in args.iter().enumerate().skip(1) {
@@ -184,128 +185,119 @@ pub fn builtin_fg(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
 }
 
 pub fn builtin_append(_shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
-    let outpath = match args.get(1) {
-        Some(arg) => Path::new(str_c_to_os(arg)),
-        None => {
+    match args {
+        [_arg0, outpath] => {
+            let outpath = Path::new(str_c_to_os(outpath));
+            let file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(outpath);
+
+            file.and_then(|mut file| std::io::copy(&mut io.input, &mut file))
+                .map(|_| 0)
+                .unwrap_or_else(|err| {
+                    let _ = writeln!(&mut io.error, ">>: {err}");
+                    2
+                })
+        }
+
+        _ => {
             let _ = writeln!(&mut io.error, ">>: takes 1 argument");
-            return 1;
-        }
-    };
-
-    let open_result = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(outpath);
-
-    match open_result {
-        Err(err) => {
-            let _ = writeln!(&mut io.error, ">>: {err}");
-            2
-        }
-
-        Ok(mut outfile) => {
-            let mut input_pipe = io.input;
-            if let Err(err) = std::io::copy(&mut input_pipe, &mut outfile) {
-                let _ = writeln!(&mut io.error, ">>: {err}");
-                3
-            } else {
-                0
-            }
+            1
         }
     }
 }
 
 pub fn builtin_overwrite(_shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
-    let outpath = match args.get(1) {
-        Some(arg) => Path::new(str_c_to_os(arg)),
-        None => {
+    match args {
+        [_arg0, outpath] => {
+            let outpath = Path::new(str_c_to_os(outpath));
+            let file = std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(outpath);
+
+            file.and_then(|mut file| std::io::copy(&mut io.input, &mut file))
+                .map(|_| 0)
+                .unwrap_or_else(|err| {
+                    let _ = writeln!(&mut io.error, ">: {err}");
+                    2
+                })
+        }
+
+        _ => {
             let _ = writeln!(&mut io.error, ">: takes 1 argument");
-            return 1;
-        }
-    };
-
-    let open_result = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(outpath);
-
-    match open_result {
-        Err(err) => {
-            let _ = writeln!(&mut io.error, ">: {err}");
-            2
-        }
-
-        Ok(mut outfile) => {
-            let mut input_pipe = io.input;
-            if let Err(err) = std::io::copy(&mut input_pipe, &mut outfile) {
-                let _ = writeln!(&mut io.error, ">: {err}");
-                3
-            } else {
-                0
-            }
+            1
         }
     }
 }
 
 pub fn builtin_alias(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
-    debug_assert!(!args.is_empty());
-
-    if args.len() == 1 {
-        // % alias
-        for (alias, values) in shell.env.aliases.iter() {
-            println!("{:?} => {:?}", alias, values);
+    match args {
+        [_arg0] => {
+            for (alias, values) in shell.env.aliases.iter() {
+                println!("{:?} => {:?}", alias, values);
+            }
+            0
         }
-        return 0;
-    } else if args.len() >= 4 && args[2].as_bytes() == b"=" {
-        // % alias foo = bar ...
-        let name = str_c_to_os(&args[1]).to_owned();
-        let values: Vec<OsString> = args[3..]
-            .iter()
-            .map(|c| str_c_to_os(c).to_owned())
-            .collect();
-        shell.env.aliases.insert(name, values);
-        return 0;
-    }
 
-    let _ = writeln!(&mut io.error, "alias: invalid assignment");
-    1
+        [_arg0, name, eq, values @ ..] if eq.as_bytes() == b"=" && !values.is_empty() => {
+            let name = str_c_to_os(name).to_owned();
+            let values: Vec<OsString> = values.iter().map(|c| str_c_to_os(c).to_owned()).collect();
+            shell.env.aliases.insert(name, values);
+            0
+        }
+
+        _ => {
+            let _ = writeln!(&mut io.error, "alias: invalid assignment");
+            1
+        }
+    }
 }
 
 pub fn builtin_var(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
-    debug_assert!(!args.is_empty());
-
-    if args.len() == 1 {
-        for (key, val) in shell.env.shell_vars.iter() {
-            println!("{:?} => {:?}", key, val);
+    match args {
+        [_arg0] => {
+            for (key, val) in shell.env.shell_vars.iter() {
+                println!("{:?} => {:?}", key, val);
+            }
+            0
         }
-        return 0;
-    } else if args.len() == 4 && args[2].as_bytes() == b"=" {
-        let key = str_c_to_os(&args[1]).to_owned();
-        let val = str_c_to_os(&args[3]).to_owned();
-        shell.env.shell_vars.insert(key, val);
-        return 0;
-    }
 
-    let _ = writeln!(&mut io.error, "var: invalid assignment");
-    1
+        [_arg0, key, eq, val] if eq.as_bytes() == b"=" => {
+            let key = str_c_to_os(key).to_owned();
+            let val = str_c_to_os(val).to_owned();
+            shell.env.shell_vars.insert(key, val);
+            0
+        }
+
+        _ => {
+            let _ = writeln!(&mut io.error, "var: invalid assignment");
+            1
+        }
+    }
 }
 
 pub fn builtin_evar(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
-    debug_assert!(!args.is_empty());
-
-    if args.len() == 1 {
-        for (key, val) in shell.env.env_vars.iter() {
-            println!("{:?} => {:?}", key, val);
+    match args {
+        [_arg0] => {
+            for (key, val) in shell.env.env_vars.iter() {
+                println!("{:?} => {:?}", key, val);
+            }
+            0
         }
-        return 0;
-    } else if args.len() == 4 && args[2].as_bytes() == b"=" {
-        let key = str_c_to_os(&args[1]).to_owned();
-        let val = str_c_to_os(&args[3]).to_owned();
-        shell.env.env_vars.insert(key, val);
-        return 0;
-    }
 
-    let _ = writeln!(&mut io.error, "evar: invalid assignment");
-    1
+        [_arg0, key, eq, val] if eq.as_bytes() == b"=" => {
+            let key = str_c_to_os(key).to_owned();
+            let val = str_c_to_os(val).to_owned();
+            shell.env.env_vars.insert(key, val);
+            0
+        }
+
+        _ => {
+            let _ = writeln!(&mut io.error, "evar: invalid assignment");
+            1
+        }
+    }
 }
