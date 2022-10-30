@@ -60,16 +60,13 @@ fn main() {
             Ok(line) => line,
 
             Err(EditError::Aborted) => {
-                println!();
                 continue;
             }
 
             Err(EditError::Exitted) => {
                 if shell.jobs() == 0 {
-                    println!("exit");
                     break;
                 } else {
-                    println!();
                     println!("You have suspended jobs.");
                     continue;
                 }

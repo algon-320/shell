@@ -117,6 +117,7 @@ impl LineEditor {
             let _ = termios::tcsetattr(STDIN_FILENO, now, &saved_termios);
 
             print!("\x1b[2 q"); // block cursor
+            print!("\r\n\x1b[J");
             stdout().flush().unwrap();
         });
 
@@ -315,7 +316,9 @@ impl LineEditor {
             let mut commands = Vec::new();
             for ev in event {
                 match (&mut self.mode, ev) {
-                    (_, Event::Ctrl('c')) => return Err(EditError::Aborted),
+                    (_, Event::Ctrl('c')) => {
+                        return Err(EditError::Aborted);
+                    }
                     (_, Event::Ctrl('d')) if current_line!().len() == 0 => {
                         return Err(EditError::Exitted);
                     }
@@ -554,19 +557,19 @@ impl LineEditor {
 
                     Command::CdToParent => {
                         // FIXME
-                        print!("\r\n\x1b[J\x1b[A");
+                        print!("\x1b[A");
                         stdout().flush().unwrap();
                         return Ok("cd ..".to_string());
                     }
                     Command::CdUndo => {
                         // FIXME
-                        print!("\r\n\x1b[J\x1b[A");
+                        print!("\x1b[A");
                         stdout().flush().unwrap();
                         return Ok("cd -".to_string());
                     }
                     Command::CdRedo => {
                         // FIXME
-                        print!("\r\n\x1b[J\x1b[A");
+                        print!("\x1b[A");
                         stdout().flush().unwrap();
                         return Ok("cd +".to_string());
                     }
@@ -581,9 +584,6 @@ impl LineEditor {
         }
 
         update_line!();
-
-        print!("\r\n\x1b[J");
-        stdout().flush().unwrap();
 
         let line = current_line!().clone();
         let result = line.to_string();
