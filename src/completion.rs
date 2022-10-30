@@ -218,37 +218,62 @@ mod tests {
 
     #[test]
     fn file_completion() {
-        let old_dir = std::env::current_dir().unwrap();
+        {
+            let old_dir = std::env::current_dir().unwrap();
 
-        let mut temp_dir = std::env::temp_dir();
-        temp_dir.push("shell-test");
-        std::fs::create_dir(&temp_dir).unwrap();
+            let mut temp_dir = std::env::temp_dir();
+            temp_dir.push("shell-test");
+            std::fs::create_dir(&temp_dir).unwrap();
 
-        std::env::set_current_dir(&temp_dir).unwrap();
-        create_file("./foo");
-        create_file("./foobar");
-        create_dir("./dir");
+            std::env::set_current_dir(&temp_dir).unwrap();
+            create_file("./foo");
+            create_file("./foobar");
+            create_dir("./dir");
 
-        let _restore_cwd = crate::utils::Defer::new(move || {
-            let _ = std::env::set_current_dir(old_dir);
-            let _ = std::fs::remove_dir_all(temp_dir);
-        });
+            let _restore_cwd = crate::utils::Defer::new(move || {
+                let _ = std::env::set_current_dir(old_dir);
+                let _ = std::fs::remove_dir_all(temp_dir);
+            });
 
-        dbg!(std::env::current_dir().unwrap());
+            let comp = FileCompletion::new();
+            set_eq!(
+                comp.candidates(&["foo"]),
+                vec!["".into(), "bar".into()] as Vec<String>
+            );
+            set_eq!(
+                comp.candidates(&["f"]),
+                vec!["oo".into(), "oobar".into()] as Vec<String>
+            );
+            set_eq!(
+                comp.candidates(&[""]),
+                vec!["foo".into(), "foobar".into(), "dir".into()] as Vec<String>
+            );
+            set_eq!(comp.candidates(&["d"]), vec!["ir/".into()] as Vec<String>);
+        }
 
-        let comp = FileCompletion::new();
-        set_eq!(
-            comp.candidates(&["foo"]),
-            vec!["".into(), "bar".into()] as Vec<String>
-        );
-        set_eq!(
-            comp.candidates(&["f"]),
-            vec!["oo".into(), "oobar".into()] as Vec<String>
-        );
-        set_eq!(
-            comp.candidates(&[""]),
-            vec!["foo".into(), "foobar".into(), "dir".into()] as Vec<String>
-        );
-        set_eq!(comp.candidates(&["d"]), vec!["ir/".into()] as Vec<String>);
+        {
+            let old_dir = std::env::current_dir().unwrap();
+
+            let mut temp_dir = std::env::temp_dir();
+            temp_dir.push("shell-test");
+            std::fs::create_dir(&temp_dir).unwrap();
+
+            std::env::set_current_dir(&temp_dir).unwrap();
+            create_dir("./dup1");
+            create_dir("./dup2");
+            create_dir("./uniq");
+
+            let _restore_cwd = crate::utils::Defer::new(move || {
+                let _ = std::env::set_current_dir(old_dir);
+                let _ = std::fs::remove_dir_all(temp_dir);
+            });
+
+            let comp = FileCompletion::new();
+            set_eq!(
+                comp.candidates(&["d"]),
+                vec!["up1".into(), "up2".into()] as Vec<String>
+            );
+            set_eq!(comp.candidates(&["u"]), vec!["niq/".into()] as Vec<String>);
+        }
     }
 }
