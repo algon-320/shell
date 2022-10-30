@@ -220,14 +220,21 @@ mod tests {
     fn file_completion() {
         let old_dir = std::env::current_dir().unwrap();
 
-        std::env::set_current_dir("/tmp").unwrap();
+        let mut temp_dir = std::env::temp_dir();
+        temp_dir.push("shell-test");
+        std::fs::create_dir(&temp_dir).unwrap();
+
+        std::env::set_current_dir(&temp_dir).unwrap();
         create_file("./foo");
         create_file("./foobar");
         create_dir("./dir");
 
         let _restore_cwd = crate::utils::Defer::new(move || {
-            std::env::set_current_dir(old_dir).unwrap();
+            let _ = std::env::set_current_dir(old_dir);
+            let _ = std::fs::remove_dir_all(temp_dir);
         });
+
+        dbg!(std::env::current_dir().unwrap());
 
         let comp = FileCompletion::new();
         set_eq!(
