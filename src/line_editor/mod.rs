@@ -749,7 +749,7 @@ fn save_history(history: &[Line]) -> std::io::Result<()> {
         let mut path = app_dir;
         path.push("history");
 
-        let mut file = std::fs::File::options().append(true).open(path)?;
+        let mut file = std::fs::File::create(path)?;
         for line in history.iter() {
             writeln!(file, "{}", line)?;
         }
