@@ -91,6 +91,7 @@ fn eval_starup(shell: &mut core::Shell) -> i32 {
 
         let file = match std::fs::File::open(&file_path) {
             Ok(file) => file,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return 0,
             _ => return 1,
         };
 
