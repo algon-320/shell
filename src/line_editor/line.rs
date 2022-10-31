@@ -174,6 +174,56 @@ impl Line {
         self.cursor = from;
     }
 
+    pub fn duplicate_current_word(&mut self) {
+        let cursor_pos = self.cursor();
+
+        let mut i = cursor_pos;
+        while i > 0 {
+            let prev_class = CharClass::from(self.char_at(i - 1).unwrap());
+            if !prev_class.is_whitespace() {
+                break;
+            }
+            i -= 1;
+        }
+        while i > 0 {
+            let prev_class = CharClass::from(self.char_at(i - 1).unwrap());
+            if prev_class.is_whitespace() {
+                break;
+            }
+            i -= 1;
+        }
+        let word_begin = i;
+
+        let mut i = cursor_pos;
+        while i > 0 {
+            let prev_class = CharClass::from(self.char_at(i - 1).unwrap());
+            if !prev_class.is_whitespace() {
+                break;
+            }
+            i -= 1;
+        }
+        while i < self.len() {
+            let class = CharClass::from(self.char_at(i).unwrap());
+            if class.is_whitespace() {
+                break;
+            }
+            i += 1;
+        }
+        let word_end = i;
+
+        let back = (word_end as isize - cursor_pos as isize).max(0);
+        self.cursor_exact(word_end);
+        self.insert(' ');
+        let chars: Vec<char> = self.iter(word_begin..word_end).map(|(ch, _)| ch).collect();
+        for ch in chars {
+            self.insert(ch);
+        }
+
+        for _ in 0..back {
+            self.cursor_prev_char();
+        }
+    }
+
     pub fn cursor_prev_char(&mut self) {
         if self.cursor > 0 {
             self.cursor -= 1;

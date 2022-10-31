@@ -51,6 +51,7 @@ enum Command {
     DeletePrevWord,
     DeleteLine,
     DeleteRange { from: usize, to: usize },
+    DuplicateWord,
     Commit,
     ChangeModeToInsert,
     ChangeModeToNormal,
@@ -468,6 +469,8 @@ impl LineEditor {
                     Command::DeletePrevWord => current_line!().delete_word(),
                     Command::DeleteLine => current_line!().delete_line(),
                     Command::DeleteRange { from, to } => current_line!().delete_range(from, to),
+
+                    Command::DuplicateWord => current_line!().duplicate_current_word(),
 
                     Command::Commit => break 'edit,
 

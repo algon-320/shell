@@ -472,6 +472,8 @@ impl EditorMode for InsertMode {
                 cmds.push(Command::ChangeModeToSearch);
             }
 
+            Event::Ctrl('n') => cmds.push(Command::DuplicateWord),
+
             _ => {}
         }
     }
