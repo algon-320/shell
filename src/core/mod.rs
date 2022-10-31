@@ -667,7 +667,9 @@ impl Env {
                 let basename = ent.file_name();
                 let path = ent.path();
                 // eprintln!("{:?} => {:?}", basename, path);
-                self.commands.insert(basename, Executable::External(path));
+                self.commands
+                    .entry(basename)
+                    .or_insert(Executable::External(path));
             }
         }
 
