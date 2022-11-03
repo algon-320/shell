@@ -294,6 +294,11 @@ impl EditorMode for NormalMode {
                 Event::KeyTab => cmds.push(Command::CdRedo),
                 Event::Ctrl('p') => cmds.push(Command::CdToParent),
 
+                Event::Ctrl('n') => {
+                    cmds.push(Command::MakeCheckPoint);
+                    cmds.push(Command::DuplicateWord);
+                }
+
                 _ => {}
             },
 
