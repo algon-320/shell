@@ -132,6 +132,7 @@ impl Shell {
         unsafe { sigaction(Signal::SIGQUIT, &sigign).expect("sigaction SIGQUIT") };
         unsafe { sigaction(Signal::SIGTSTP, &sigign).expect("sigaction SIGTSTP") };
         unsafe { sigaction(Signal::SIGTTOU, &sigign).expect("sigaction SIGTTOU") };
+        unsafe { sigaction(Signal::SIGTTIN, &sigign).expect("sigaction SIGTTIN") };
 
         let sigdfl = SigAction::new(SigHandler::SigDfl, SaFlags::empty(), SigSet::empty());
         unsafe { sigaction(Signal::SIGCHLD, &sigdfl).expect("sigaction SIGCHLD") };
