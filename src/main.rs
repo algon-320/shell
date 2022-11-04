@@ -9,7 +9,7 @@ fn main() {
 
     let mut line_editor = line_editor::LineEditor::new();
     let mut shell = core::Shell::new();
-    let mut last_status = eval_starup(&mut shell);
+    let mut last_status = eval_startup(&mut shell).unwrap_or(0);
 
     loop {
         terminal_size::update();
@@ -82,31 +82,27 @@ fn main() {
     }
 }
 
-fn eval_starup(shell: &mut core::Shell) -> i32 {
+fn eval_startup(shell: &mut core::Shell) -> Option<i32> {
     use std::io::{BufRead as _, BufReader};
 
-    if let Some(app_dir) = application_dir() {
-        let mut file_path = app_dir;
-        file_path.push("startup");
+    let app_dir = application_dir()?;
+    let mut file_path = app_dir;
+    file_path.push("startup");
 
-        let file = match std::fs::File::open(&file_path) {
-            Ok(file) => file,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return 0,
-            _ => return 1,
-        };
+    let file = match std::fs::File::open(&file_path) {
+        Ok(file) => file,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return None,
+        _ => return Some(1),
+    };
 
-        let mut status = 0;
-        for line in BufReader::new(file).lines().filter_map(|r| r.ok()) {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
+    let mut status = 0;
+    for line in BufReader::new(file).lines().filter_map(|r| r.ok()) {
+        let line = line.trim();
+        if !line.is_empty() {
             status = shell.eval(line);
         }
-        status
-    } else {
-        0
     }
+    Some(status)
 }
 
 // TODO: consider being XDG complient
