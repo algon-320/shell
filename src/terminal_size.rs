@@ -20,7 +20,7 @@ pub fn init() {
     use nix::sys::signal::{sigaction, SaFlags, SigAction, SigHandler, SigSet, Signal};
     let action = SigAction::new(
         SigHandler::Handler(sigwinch_handler),
-        SaFlags::SA_RESTART,
+        SaFlags::empty(),
         SigSet::empty(),
     );
     unsafe { sigaction(Signal::SIGWINCH, &action).expect("sigaction for SIGWINCH") };

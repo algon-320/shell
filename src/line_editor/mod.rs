@@ -2,6 +2,7 @@ mod line;
 mod modes;
 mod text_object;
 
+use nix::errno::Errno;
 use nix::libc::STDIN_FILENO;
 use nix::sys::termios;
 use nix::unistd;
@@ -254,8 +255,11 @@ impl LineEditor {
         'edit: loop {
             update_line!();
 
-            let nb = unistd::read(STDIN_FILENO, &mut read_buf[..]).expect("read STDIN");
-            let input = &read_buf[..nb];
+            let input = match unistd::read(STDIN_FILENO, &mut read_buf[..]) {
+                Ok(nb) => &read_buf[..nb],
+                Err(Errno::EINTR) => continue,
+                Err(err) => panic!("{err}"),
+            };
 
             let mut event = Vec::new();
 
