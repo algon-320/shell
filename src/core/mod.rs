@@ -491,6 +491,27 @@ impl Shell {
             }
 
             Command::SubShell(_list) => {
+                // TODO
+                // 1. fork
+                // 2. derive or assign pgid
+                // 3. don't ignore SIGINT, SIGTSTP, SIGQUIT, SIGTTOU, SIGTTIN,
+                // 4. wait for the children normally
+                // 5. exit with last status
+
+                // When the parent shell process waits for a job consists of a subshell,
+                // - it waits for the forked shell process as if it was a single command
+                // - the forked shell process waits for processes launched by that,
+                //   and finally it would terminate with the last status code of the children
+
+                // If a user stops foreground processes by hitting <CTRL-Z>,
+                // the forked process will be stopped because:
+                // - it belongs to the foreground process group
+                // - it doesn't ignore the SIGTSTP signal
+
+                // If a user terminates foreground processes by hitting <CTRL-C>,
+                // the forked process will be terminated because:
+                // - it belongs to the foreground process group
+                // - it doesn't ignore the SIGINT signal
                 todo!();
             }
         }
