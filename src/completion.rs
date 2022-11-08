@@ -129,6 +129,8 @@ impl FileCompletion {
                 .push(std::path::MAIN_SEPARATOR);
         }
 
+        candidates.sort_unstable();
+
         Some(candidates)
     }
 
