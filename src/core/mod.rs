@@ -43,6 +43,104 @@ pub fn expand_tilde(bytes: &[u8]) -> Vec<u8> {
     }
 }
 
+pub fn expand_pattern(bytes: &[u8]) -> Vec<u8> {
+    if !bytes.contains(&b'*') {
+        return bytes.to_vec();
+    }
+
+    type Stack<T> = Vec<T>;
+
+    // split the bytes into parts by '/' and reverse them
+    // example: "src/*.rs" --> ["*.rs", "src"]
+    let mut patterns: Stack<OsString> = bytes
+        .split(|b| *b == std::path::MAIN_SEPARATOR as u8)
+        .map(|s| OsStr::from_bytes(s).to_owned())
+        .rev()
+        .collect();
+
+    if let Some(pat) = patterns.last() {
+        if pat.is_empty() {
+            patterns.pop();
+        }
+    }
+
+    let mut origin = if bytes.first().copied() == Some(std::path::MAIN_SEPARATOR as u8) {
+        PathBuf::from("/")
+    } else {
+        PathBuf::from(".")
+    };
+
+    fn search(matched: &mut Vec<PathBuf>, dir: &mut PathBuf, patterns: &mut Stack<OsString>) {
+        let pat = patterns.pop().unwrap();
+
+        let Ok(entries) = std::fs::read_dir(&dir) else { return };
+        for ent in entries.filter_map(|ent| ent.ok()) {
+            if !matches(pat.as_bytes(), ent.file_name().as_bytes()) {
+                continue;
+            }
+
+            let Ok(ft) = ent.file_type() else { continue };
+
+            let is_dir = if ft.is_symlink() {
+                // retrieve the metadata of the file pointed to by the symlink
+                let dent_path = ent.path();
+                match std::fs::metadata(dent_path) {
+                    Ok(meta) => meta.is_dir(),
+                    Err(_) => false, // treat this file as a regular file
+                }
+            } else {
+                ft.is_dir()
+            };
+
+            if patterns.is_empty() {
+                // if we have no more pattern, it means this path can be matched against the pattern.
+                matched.push(ent.path());
+            } else if is_dir {
+                // if the current entry is a directory, continue searching over there.
+                dir.push(ent.file_name());
+                search(matched, dir, patterns);
+                dir.pop();
+            }
+        }
+
+        patterns.push(pat);
+    }
+
+    fn matches(pat: &[u8], name: &[u8]) -> bool {
+        match (pat, name) {
+            ([], []) => true,
+            ([], _) => false,
+            ([b'*', pat_tail @ ..], name) => {
+                for i in 0..name.len() + 1 {
+                    if matches(pat_tail, &name[i..]) {
+                        return true;
+                    }
+                }
+                false
+            }
+            ([ch1, pat_tail @ ..], [ch2, name_tail @ ..]) => {
+                if ch1 == ch2 {
+                    matches(pat_tail, name_tail)
+                } else {
+                    false
+                }
+            }
+            (_, []) => false,
+        }
+    }
+
+    let mut matched = Vec::new();
+    search(&mut matched, &mut origin, &mut patterns);
+
+    let mut ret = Vec::new();
+    for path in matched {
+        ret.extend(path.as_os_str().as_bytes());
+        ret.push(b' ');
+    }
+    ret.pop();
+    ret
+}
+
 type Pgid = Pid;
 
 #[derive(Clone)]
@@ -426,9 +524,7 @@ impl Shell {
         let mut buf = Vec::new();
         for part in parts {
             match part {
-                StrPart::Chars(chars) => {
-                    buf.extend(expand_tilde(chars.as_bytes()));
-                }
+                StrPart::Chars(chars) => buf.extend(chars.as_bytes()),
 
                 StrPart::Expansion(expansion) => match expansion {
                     Expansion::Variable { name } => {
@@ -510,6 +606,9 @@ impl Shell {
                 },
             }
         }
+
+        let buf = expand_tilde(&buf);
+        let buf = expand_pattern(&buf);
 
         buf
     }
