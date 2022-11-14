@@ -1,8 +1,10 @@
+/// `Defer` invokes a function automatically when is is dropped
 pub struct Defer<F: FnOnce()> {
     f: Option<F>,
 }
 
 impl<F: FnOnce()> Defer<F> {
+    /// Creates a new `Defer` instance with the given function
     pub fn new(f: F) -> Self {
         Self { f: Some(f) }
     }
