@@ -4,14 +4,17 @@ use std::sync::atomic::{AtomicU16, Ordering};
 static ROWS: AtomicU16 = AtomicU16::new(0);
 static COLS: AtomicU16 = AtomicU16::new(0);
 
+/// Returns the number of terminal rows
 pub fn get_rows() -> u16 {
     ROWS.load(Ordering::SeqCst)
 }
 
+/// Returns the number of terminal columns
 pub fn get_cols() -> u16 {
     COLS.load(Ordering::SeqCst)
 }
 
+/// Updates the terminal size cache used by `get_rows`/`get_cols`
 pub fn update() {
     let mut winsize = nix::pty::Winsize {
         ws_row: 0,
