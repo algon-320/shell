@@ -39,11 +39,21 @@ impl CommandCompletion {
 impl Complete for CommandCompletion {
     fn candidates(&self, words: &[&str]) -> Vec<String> {
         if words.len() <= 1 {
-            self.commands.candidates(words)
-        } else if let Some(comp) = self.rules.get(words[0]) {
-            comp.candidates(words)
+            // for command name
+            let cand = self.commands.candidates(words);
+            if cand.is_empty() {
+                self.fallback.candidates(words)
+            } else {
+                cand
+            }
         } else {
-            self.fallback.candidates(words)
+            // for arguments
+            let cmd_name = words[0];
+            if let Some(comp) = self.rules.get(cmd_name) {
+                comp.candidates(words)
+            } else {
+                self.fallback.candidates(words)
+            }
         }
     }
 }
