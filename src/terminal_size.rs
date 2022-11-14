@@ -27,7 +27,8 @@ pub fn update() {
     COLS.store(winsize.ws_col, Ordering::SeqCst);
 }
 
-pub fn init() {
+/// Installs a signal handler for SIGWINCH
+pub fn install_sigwinch_handler() {
     update();
 
     use nix::sys::signal::{sigaction, SaFlags, SigAction, SigHandler, SigSet, Signal};

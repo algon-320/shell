@@ -5,7 +5,7 @@ mod terminal_size;
 mod utils;
 
 fn main() {
-    terminal_size::init();
+    terminal_size::install_sigwinch_handler();
 
     let mut line_editor = line_editor::LineEditor::new();
     let mut shell = core::Shell::new();
