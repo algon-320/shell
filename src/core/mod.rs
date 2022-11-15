@@ -251,9 +251,14 @@ impl Shell {
         let shell_pgid = pid;
         unistd::tcsetpgrp(STDIN_FILENO, shell_pgid).expect("tcsetpgrp");
 
+        let mut env = Env::new();
+        if let Ok(cwd) = std::env::current_dir() {
+            env.set_env("PWD", cwd.into_os_string());
+        }
+
         Self {
             shell_pgid,
-            env: Env::new(),
+            env,
             jobs: HashMap::new(),
 
             cd_undo_stack: Vec::new(),

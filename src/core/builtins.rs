@@ -102,11 +102,14 @@ pub fn builtin_cd(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
             }
 
             Ok(_) => {
+                let actual_new_cwd =
+                    std::env::current_dir().expect("getcwd right after chdir should success");
+
                 if let Ok(old_cwd) = old_cwd {
                     shell.env.set_env("OLDPWD", old_cwd.as_os_str().to_owned());
                     shell.cd_undo_stack.push(old_cwd);
                 }
-                shell.env.set_env("PWD", new_cwd.into_os_string());
+                shell.env.set_env("PWD", actual_new_cwd.into_os_string());
                 shell.cd_redo_stack.clear();
                 0
             }
