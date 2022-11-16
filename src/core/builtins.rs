@@ -240,7 +240,7 @@ pub fn builtin_alias(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
     match args {
         [_arg0] => {
             for (alias, values) in shell.env.aliases.iter() {
-                println!("{:?} => {:?}", alias, values);
+                let _ = writeln!(&mut io.output, "{alias:?} => {values:?}");
             }
             0
         }
@@ -263,7 +263,7 @@ pub fn builtin_var(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
     match args {
         [_arg0] => {
             for (key, val) in shell.env.shell_vars.iter() {
-                println!("{:?} => {:?}", key, val);
+                let _ = writeln!(&mut io.output, "{key:?} => {val:?}");
             }
             0
         }
@@ -286,7 +286,7 @@ pub fn builtin_evar(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
     match args {
         [_arg0] => {
             for (key, val) in shell.env.env_vars.iter() {
-                println!("{:?} => {:?}", key, val);
+                let _ = writeln!(&mut io.output, "{key:?} => {val:?}");
             }
             0
         }
