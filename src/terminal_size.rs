@@ -36,7 +36,7 @@ pub fn install_sigwinch_handler() {
 
     use nix::sys::signal::{sigaction, SaFlags, SigAction, SigHandler, SigSet, Signal};
     let handler = SigHandler::Handler(sigwinch_handler);
-    let action = SigAction::new(handler, SaFlags::empty(), SigSet::empty());
+    let action = SigAction::new(handler, SaFlags::SA_RESTART, SigSet::empty());
     unsafe { sigaction(Signal::SIGWINCH, &action).expect("sigaction for SIGWINCH") };
 }
 
