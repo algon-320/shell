@@ -73,31 +73,39 @@ pub fn expand_pattern(bytes: &[u8]) -> Vec<u8> {
     fn search(matched: &mut Vec<PathBuf>, dir: &mut PathBuf, patterns: &mut Stack<OsString>) {
         let pat = patterns.pop().unwrap();
 
-        let Ok(entries) = std::fs::read_dir(&dir) else { return };
-        for ent in entries.filter_map(|ent| ent.ok()) {
-            if !matches(pat.as_bytes(), ent.file_name().as_bytes()) {
+        let Ok(mut dirhandle) = nix::dir::Dir::open(
+            dir,
+            nix::fcntl::OFlag::O_DIRECTORY,
+            nix::sys::stat::Mode::empty(),
+        ) else { return };
+
+        for ent in dirhandle.iter().filter_map(|ent| ent.ok()) {
+            let file_name = OsStr::from_bytes(ent.file_name().to_bytes());
+
+            if !matches(pat.as_bytes(), file_name.as_bytes()) {
                 continue;
             }
+            let Some(ft) = ent.file_type() else { continue };
 
-            let Ok(ft) = ent.file_type() else { continue };
+            let mut dent_path = dir.clone();
+            dent_path.push(file_name);
 
-            let is_dir = if ft.is_symlink() {
+            let is_dir = if let nix::dir::Type::Symlink = ft {
                 // retrieve the metadata of the file pointed to by the symlink
-                let dent_path = ent.path();
-                match std::fs::metadata(dent_path) {
+                match std::fs::metadata(&dent_path) {
                     Ok(meta) => meta.is_dir(),
                     Err(_) => false, // treat this file as a regular file
                 }
             } else {
-                ft.is_dir()
+                matches!(ft, nix::dir::Type::Directory)
             };
 
             if patterns.is_empty() {
                 // if we have no more pattern, it means this path can be matched against the pattern.
-                matched.push(ent.path());
+                matched.push(dent_path);
             } else if is_dir {
                 // if the current entry is a directory, continue searching over there.
-                dir.push(ent.file_name());
+                dir.push(file_name);
                 search(matched, dir, patterns);
                 dir.pop();
             }
