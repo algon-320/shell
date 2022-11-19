@@ -479,6 +479,8 @@ impl EditorMode for InsertMode {
 
             Event::Ctrl('n') => cmds.push(Command::DuplicateWord),
 
+            Event::Ctrl('l') => cmds.push(Command::ClearScreen),
+
             _ => {}
         }
     }

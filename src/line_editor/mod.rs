@@ -71,6 +71,7 @@ enum Command {
     CdToParent,
     CdUndo,
     CdRedo,
+    ClearScreen,
 }
 
 pub enum EditError {
@@ -579,6 +580,10 @@ impl LineEditor {
                         print!("\x1b[A");
                         stdout().flush().unwrap();
                         return Ok("cd +".to_string());
+                    }
+
+                    Command::ClearScreen => {
+                        return Ok("clear".to_string());
                     }
                 }
 
