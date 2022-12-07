@@ -809,37 +809,25 @@ impl Env {
 
         // register builtin commands
         {
+            macro_rules! builtin_bind {
+                ($cmd:expr, $impl_name:path) => {{
+                    let tmp = Executable::Builtin($impl_name);
+                    self.commands.insert($cmd.into(), tmp);
+                }};
+            }
+
             use builtins::*;
-
-            let args = Executable::Builtin(builtin_args);
-            self.commands.insert("args".into(), args);
-
-            let exit = Executable::Builtin(builtin_exit);
-            self.commands.insert("exit".into(), exit);
-
-            let cd = Executable::Builtin(builtin_cd);
-            self.commands.insert("cd".into(), cd);
-
-            let jobs = Executable::Builtin(builtin_jobs);
-            self.commands.insert("jobs".into(), jobs);
-
-            let fg = Executable::Builtin(builtin_fg);
-            self.commands.insert("fg".into(), fg);
-
-            let append = Executable::Builtin(builtin_append);
-            self.commands.insert(">>".into(), append);
-
-            let overwrite = Executable::Builtin(builtin_overwrite);
-            self.commands.insert(">".into(), overwrite);
-
-            let alias = Executable::Builtin(builtin_alias);
-            self.commands.insert("alias".into(), alias);
-
-            let var = Executable::Builtin(builtin_var);
-            self.commands.insert("var".into(), var);
-
-            let evar = Executable::Builtin(builtin_evar);
-            self.commands.insert("evar".into(), evar);
+            builtin_bind!("args", builtin_args);
+            builtin_bind!("exit", builtin_exit);
+            builtin_bind!("cd", builtin_cd);
+            builtin_bind!("jobs", builtin_jobs);
+            builtin_bind!("fg", builtin_fg);
+            builtin_bind!(">>", builtin_append);
+            builtin_bind!(">", builtin_overwrite);
+            builtin_bind!("alias", builtin_alias);
+            builtin_bind!("var", builtin_var);
+            builtin_bind!("evar", builtin_evar);
+            builtin_bind!("unset", builtin_unset);
         }
     }
 

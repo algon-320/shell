@@ -304,3 +304,18 @@ pub fn builtin_evar(shell: &mut Shell, args: &[CString], mut io: Io) -> i32 {
         }
     }
 }
+
+pub fn builtin_unset(shell: &mut Shell, args: &[CString], mut _io: Io) -> i32 {
+    match args {
+        [_arg0, names @ ..] => {
+            for name in names {
+                let name = str_c_to_os(name);
+                shell.env.env_vars.remove(name);
+                shell.env.shell_vars.remove(name);
+            }
+            0
+        }
+
+        _ => 0,
+    }
+}
